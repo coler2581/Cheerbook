@@ -318,7 +318,7 @@ var matWrap=document.createElement('div');matWrap.className='tbody';
    +'<div class="matwrap" id="matBox"><svg id="mat" viewBox="-2 -4 58 51" role="img" aria-label="Competition mat with athlete positions">'
    +'<rect class="edge" x="-2" y="-4" width="58" height="51"/><rect x="0" y="0" width="54" height="42" fill="var(--mat)"/>'+lines
    +'<text class="side" x="27" y="-1.4">BACK OF MAT</text><text class="side" x="27" y="46.6">FRONT · JUDGES</text>'+spots
-   +'<g id="spotPath"></g><g id="ghosts"></g><g id="traffic"></g><line id="guide" x1="0" y1="0" x2="0" y2="42" visibility="hidden"/><g id="dots"></g><g id="gboxes"></g><g id="bends"></g><rect id="marquee" class="marquee" x="0" y="0" width="0" height="0" visibility="hidden"/></svg><button class="zoomreset" id="zoomReset" data-act="zoomReset" hidden>Reset zoom</button></div>'
+   +'<g id="spotPath"></g><g id="ghosts"></g><g id="traffic"></g><line id="guide" x1="0" y1="0" x2="0" y2="42" visibility="hidden"/><g id="dots"></g><g id="gboxes"></g><g id="bends"></g><rect id="marquee" class="marquee" x="0" y="0" width="0" height="0" visibility="hidden"/></svg><button class="zoomreset" id="zoomReset" data-act="zoomReset" hidden>Reset zoom</button><div class="selchip" id="selChip" hidden><span id="selChipT"></span><button data-act="selOpts" id="selChipO" hidden>Options</button><button data-act="selClear" id="selChipC">Clear</button><button class="primary" data-act="selMode">Done</button></div></div>'
    +'<div class="ctl"><label class="tog"><input type="checkbox" id="ghostTog" data-f="ghost" checked> Show moves from last 8-count</label>'
    +'<label class="tog"><input type="checkbox" id="freeTog" data-f="free"> Free move</label>'
    +'<label class="tog"><input type="checkbox" id="trafTog" data-f="traf" checked> Traffic warnings</label>'
@@ -1294,7 +1294,7 @@ function endBox(){var b0=box;box=null;drawBox();
   if(!selMode){selMode=true;sel=[]}
   hit.forEach(function(id){if(sel.indexOf(id)<0)sel.push(id)});renderMat();renderSelBar();
   flash(sel.length+' selected. Drag any of them to move them together.')}
-function renderSelBar(){var b=document.getElementById('selBar'),btn=document.getElementById('selBtn');if(!b)return;
+function renderSelBar(){try{decorateMat()}catch(x){}var b=document.getElementById('selBar'),btn=document.getElementById('selBtn');if(!b)return;
   if(btn)btn.textContent=selMode?'Done selecting':'Select athletes';
   if(!selMode){b.hidden=true;b.innerHTML='';return}
   b.hidden=false;
@@ -1695,7 +1695,7 @@ window.addEventListener('pointermove',function(e){
   if(drag.ids.length>1){/* keep the whole selection on the mat and in the same shape */
     var mnX=54,mxX=0,mnY=42,mxY=0;drag.ids.forEach(function(id){var q=drag.start[id];mnX=Math.min(mnX,q[0]);mxX=Math.max(mxX,q[0]);mnY=Math.min(mnY,q[1]);mxY=Math.max(mxY,q[1])});
     dx=Math.max(-mnX,Math.min(54-mxX,dx));dy=Math.max(-mnY,Math.min(42-mxY,dy));p=[r2(s0[0]+dx),r2(s0[1]+dy)]}
-  if(drag.selTap&&!drag.moved&&Math.hypot(dx,dy)<0.6)return;
+  if(drag.selTap&&!drag.moved&&downAt&&Math.hypot(e.clientX-downAt.x,e.clientY-downAt.y)<(lastPtr==='mouse'?4:10))return;
   drag.ids.forEach(function(id){var q=id===drag.id?p:[r2(Math.max(0,Math.min(54,drag.start[id][0]+dx))),r2(Math.max(0,Math.min(42,drag.start[id][1]+dy)))];it.e.pos[id]=q;
     var el=id===drag.id?drag.el:document.querySelector('#dots .dot[data-id="'+id+'"]');if(el)el.setAttribute('transform','translate('+q[0]+' '+q[1]+')')});
   drag.moved=true;showGuide(p[0]);
@@ -2321,6 +2321,7 @@ function betaPageAct(act,b,id){
   case 'bigMat':if(L.size.mat==='full'){L.size.mat=L.size.matBefore&&L.size.matBefore!=='full'?L.size.matBefore:'half'}else{L.size.matBefore=L.size.mat;L.size.mat='full'}saveLayout();flip(render);return true;
   case 'kbdHelp':kbdOpen=!kbdOpen;gearOpen=false;render();return true;
   case 'zoomReset':zoomTo(1);return true;
+  case 'selOpts':{if(sel.length!==1)return true;var r0=(document.getElementById('selChip')||document.body).getBoundingClientRect();openCtx(sel[0],r0.left+20,r0.bottom+4);return true}
   }
   return false}
 
@@ -2433,18 +2434,27 @@ function pickName(){var a=R.athletes.find(function(x){return x.id===pickId});ret
 function decorateMat(){var m=document.getElementById('mat');if(!m)return;
   Array.prototype.forEach.call(m.querySelectorAll('.dot.picked'),function(d){d.classList.remove('picked')});
   if(pickId){var d=m.querySelector('.dot[data-id="'+pickId+'"]');if(d)d.classList.add('picked');else pickId=null}
-  var zb=document.getElementById('zoomReset');if(zb)zb.hidden=!(Z.s>1.01)}
+  var zb=document.getElementById('zoomReset');if(zb)zb.hidden=!(Z.s>1.01);
+  var ch=document.getElementById('selChip');if(ch){ch.hidden=!selMode;if(selMode){document.getElementById('selChipT').textContent=sel.length?(sel.length+' selected'+(sel.length>1?' · drag one to move all':'')):'Tap athletes or drag a box';
+    document.getElementById('selChipO').hidden=sel.length!==1;document.getElementById('selChipC').hidden=!sel.length}}}
 function placePicked(cx,cy){if(!pickId)return false;var svg=document.getElementById('mat');if(!svg)return false;var pt=svg.createSVGPoint();pt.x=cx;pt.y=cy;var q=pt.matrixTransform(svg.getScreenCTM().inverse());
   if(q.x<-1||q.x>55||q.y<-1||q.y>43)return false;var it=find(cur),id=pickId,np=snapPos(q.x,q.y);it.e.pos[id]=np;var nm=pickName();pickId=null;markDirty();refreshTraffic();renderMat();flash(nm+' moved.');return true}
-app.addEventListener('pointerdown',function(e){downAt={x:e.clientX,y:e.clientY,t:performance.now(),id:e.pointerId};if(ctxm&&!(e.target.closest&&e.target.closest('.ctxm')))closeCtx()},true);
+var lastPtr='mouse';
+app.addEventListener('pointerdown',function(e){downAt={x:e.clientX,y:e.clientY,t:performance.now(),id:e.pointerId};lastPtr=e.pointerType||'mouse';if(ctxm&&!(e.target.closest&&e.target.closest('.ctxm')))closeCtx()},true);
 /* long-press an athlete (touch) or right-click (mouse) for their options */
-app.addEventListener('pointerdown',function(e){if(ATHLETE||playing)return;var d=e.target.closest&&e.target.closest('#mat .dot');if(!d||e.button>0)return;
+/* touch: press and hold an athlete to start selecting (then tap more, or draw a box, and drag any of them to move them all).
+   mouse: right-click or hold for that athlete's options. While selecting, holding does nothing, so press-hold-drag moves the group. */
+app.addEventListener('pointerdown',function(e){if(ATHLETE||playing||selMode)return;var d=e.target.closest&&e.target.closest('#mat .dot');if(!d||e.button>0)return;
+  var touchy=e.pointerType==='touch'||e.pointerType==='pen';
   clearTimeout(lp&&lp.t);lp={id:d.dataset.id,x:e.clientX,y:e.clientY,t:setTimeout(function(){if(!lp)return;var L0=lp;lp=null;
     if(drag&&drag.id===L0.id){var it=find(cur);Object.keys(drag.start).forEach(function(k){it.e.pos[k]=drag.start[k]});drag=null;showGuide(null);renderMat()}
-    if(navigator.vibrate)try{navigator.vibrate(12)}catch(x){}openCtx(L0.id,L0.x,L0.y)},520)}});
+    if(navigator.vibrate)try{navigator.vibrate(12)}catch(x){}
+    if(touchy)startSelecting(L0.id);else openCtx(L0.id,L0.x,L0.y)},480)}});
+function startSelecting(id){pickId=null;selMode=true;sel=id?[id]:[];renderMat();renderSelBar();
+  flash('Selecting. Tap more athletes or drag a box on the mat, then drag any selected athlete to move them all.')}
 window.addEventListener('pointermove',function(e){if(lp&&Math.hypot(e.clientX-lp.x,e.clientY-lp.y)>9){clearTimeout(lp.t);lp=null}},true);
 window.addEventListener('pointerup',function(){if(lp){clearTimeout(lp.t);lp=null}},true);
-app.addEventListener('contextmenu',function(e){var d=e.target.closest&&e.target.closest('#mat .dot');if(!d||ATHLETE)return;e.preventDefault();if(lp){clearTimeout(lp.t);lp=null}
+app.addEventListener('contextmenu',function(e){var d=e.target.closest&&e.target.closest('#mat .dot');if(!d||ATHLETE)return;e.preventDefault();if(lastPtr!=='mouse')return;if(lp){clearTimeout(lp.t);lp=null}
   if(drag){var it=find(cur);Object.keys(drag.start).forEach(function(k){it.e.pos[k]=drag.start[k]});drag=null;showGuide(null);renderMat()}if(!ctxm)openCtx(d.dataset.id,e.clientX,e.clientY)});
 function openCtx(id,x,y){closeCtx();var a=R.athletes.find(function(q){return q.id===id});if(!a)return;var it=find(cur),prev=it.n>0?it.list[it.n-1].e:null,i=R.athletes.indexOf(a),bend=(it.e.bend||{})[id];
   var same=prev&&(function(){var p=posOf(prev,a,i),q=posOf(it.e,a,i);return Math.abs(p[0]-q[0])<.01&&Math.abs(p[1]-q[1])<.01})();

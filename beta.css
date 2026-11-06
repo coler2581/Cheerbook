@@ -102,3 +102,12 @@ body.m:not(.tab) .runbtn{display:none}
 .cblogo{width:28px;height:28px;border-radius:7px;flex:0 0 auto;display:block}
 .mbrand .cblogo{width:30px;height:30px}
 .cbword{font:800 20px var(--f-body);letter-spacing:-.02em;color:var(--ink)}.cbword span{color:var(--accent)}
+
+/* ---------- selecting several athletes (shown on the mat itself, so it works on phones) ---------- */
+#mat{-webkit-touch-callout:none}
+.selchip{position:absolute;left:8px;right:8px;top:8px;z-index:3;display:flex;align-items:center;gap:6px;padding:6px 6px 6px 12px;border-radius:999px;background:rgba(11,13,22,.82);color:#fff;font:600 13.5px var(--f-body);backdrop-filter:blur(4px)}
+.selchip span{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.selchip button{flex:0 0 auto;border:0;border-radius:999px;padding:7px 12px;font:700 13px var(--f-body);background:rgba(255,255,255,.16);color:#fff;cursor:pointer}
+.selchip button.primary{background:var(--accent);color:var(--accent-ink)}
+.selchip[hidden]{display:none}
+.selchip~.zoomreset,.zoomreset{top:auto;bottom:8px}
