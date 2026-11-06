@@ -1,4 +1,4 @@
-# Cheer Playbook (beta)
+# Cheerbook (beta)
 
 Design cheer routines on a mat that plays in time with your music. Run practice from a tablet, and give every athlete a live link to their part.
 

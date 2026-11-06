@@ -1,13 +1,13 @@
 {
-  "name": "Cheer Playbook",
-  "short_name": "Playbook",
+  "name": "Cheerbook",
+  "short_name": "Cheerbook",
   "description": "Design cheer routines on a mat synced to your music, run practice from a tablet, and give every athlete a live link to their part.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#f3f4f9",
-  "theme_color": "#d92d63",
+  "background_color": "#13234A",
+  "theme_color": "#13234A",
   "icons": [
     {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
     {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png"},

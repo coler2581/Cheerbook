@@ -3,7 +3,7 @@
 var ENV=window.CP_ENV||{};
 var ATHLETE=!!ENV.athlete;
 function BLOB(id){return ENV.blob?ENV.blob(id):'/_blob/'+id}
-var PAGE_TITLE='Cheer Playbook Beta';
+var PAGE_TITLE='Cheerbook Beta';
 var FONT_HREF='https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Figtree:wght@400;500;600;700&display=swap';
 var DEFAULT_RESET=':root{color-scheme:light;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}';
 var ROLES=['Flyer','Base','Backspot','Tumbler'];
@@ -470,6 +470,7 @@ function sheetWarnings(cov){var w=[],secs=routineSecs(),mx=maxSecs();
 
 /* ---- rendering ---- */
 var DEVTAG='<span class="devtag">Beta</span>';
+var CB_LOGO='<img class="cblogo" src="icons/logo.svg" alt="Cheerbook">';
 /* ---- app pages around the editor: routines home, teams & roster, athlete profile, athlete view, library, account ----
    Teams own the roster. A routine linked to a team (r.teamId) keeps a working copy of the team's athletes and groups;
    edits in the editor flow back to the team and on to its other routines, and edits on the Teams page flow out to every routine. */
@@ -526,7 +527,7 @@ function pageDirty(){markDirty()}
 function teamOpts(sel,none){return (none?'<option value="">'+none+'</option>':'')+D.teams.map(function(t){return '<option value="'+t.id+'"'+(t.id===sel?' selected':'')+'>'+esc(t.name)+'</option>'}).join('')}
 function brandLogo(){var p=D.profile||{};return (p.logo?'<img class="plogo" src="'+esc(BLOB(p.logo.id))+'" alt="">':'')+(p.program?'<span class="pprog">'+esc(p.program)+'</span>':'')}
 function pageHeader(){var cv=view==='team'||view==='ath'?'teams':view;
-  return '<header class="top"><div class="brandrow"><span class="eyebrow">Cheer Routine Playbook</span>%%DEVTAG%%'+brandLogo()
+  return '<header class="top"><div class="brandrow">'+CB_LOGO+'<b class="cbword">cheer<span>book</span></b>%%DEVTAG%%'+brandLogo()
    +'<span class="status" id="status"></span><button class="btn small" id="undoBtn" data-act="undo" title="Undo" aria-label="Undo">↶<span class="undoTxt"> Undo</span></button><button class="btn small" id="redoBtn" data-act="redo" title="Redo" aria-label="Redo">↷<span class="undoTxt"> Redo</span></button>'
    +'<button class="btn primary" id="saveBtn" data-act="save" hidden>Save</button></div>'
    +'<nav class="pnav" aria-label="Playbook">'+NAV.map(function(n){return '<button class="ptab'+(cv===n[0]?' on':'')+'" data-act="nav" data-id="'+n[0]+'"'+(cv===n[0]?' aria-current="page"':'')+'>'+n[1]+'</button>'}).join('')
@@ -845,7 +846,7 @@ function sheetHtml(inner,kind,title){var anim=!lastSheets[kind];lastSheets[kind]
 function endSheets(){Object.keys(lastSheets).forEach(function(k){if(lastSheets[k]===2)lastSheets[k]=1;else delete lastSheets[k]})}
 function closeSheet(kind){if(kind==='ed'){sheetOpen=false;bsFull=false}else{gearOpen=false;moreOpen=false;viewsOpen=false;pdfOpen=false;newOpen=false;homeMenu=null}render()}
 function phoneTop(back,title,extra){
-  return '<header class="mtop">'+(back?'<button class="mib" data-act="'+back[0]+'" data-id="'+esc(back[1])+'" aria-label="Back">‹</button>':'<span class="mbrand">'+brandLogo()+'</span>')
+  return '<header class="mtop">'+(back?'<button class="mib" data-act="'+back[0]+'" data-id="'+esc(back[1])+'" aria-label="Back">‹</button>':'<span class="mbrand">'+((D.profile||{}).logo?brandLogo():CB_LOGO)+'</span>')
    +(back&&back[1]==='home'&&view==='editor'?'<button class="mtitle mtbtn" data-act="renameR" aria-label="Rename '+esc(title)+'">'+esc(title)+'</button>':'<b class="mtitle">'+esc(title)+'</b>')+'%%DEVTAG%%<span class="status mdot" id="status"></span>'
    +'<button class="mib" id="undoBtn" data-act="undo" aria-label="Undo" title="Undo">↶</button><button id="redoBtn" data-act="redo" hidden></button><button id="saveBtn" data-act="save" hidden></button>'+(extra||'')+'</header>'}
 function phonePageChrome(){var cv=view==='team'||view==='ath'?'teams':view,t=teamById(L.pTeam);
@@ -1112,7 +1113,7 @@ function render(){
     if(L.spot&&!spotAth())L.spot=null;updateSpotUI();updateTitles();updateMeta();updateSong();renderMsg();updatePlayBtn();updateRangeUI();updateUndo();renderSelBar();
     applyMatView();var tt0=matWrap.querySelector('#trafTog')||(matCtl&&matCtl.querySelector('#trafTog'));if(tt0)tt0.checked=L.traffic!==false;if(!playing)renderMat();lastMsg=null;syncVideos(false);updateLive(false);updateStatus();return}
   app.innerHTML='<div class="wrap">'
-   +'<header class="top"><div class="brandrow"><span class="eyebrow">Cheer Routine Playbook</span><span class="devtag">Beta</span>'
+   +'<header class="top"><div class="brandrow">'+CB_LOGO+'<b class="cbword">cheer<span>book</span></b><span class="devtag">Beta</span>'
    +'<span class="status" id="status"></span><button class="btn small" id="undoBtn" data-act="undo" title="Undo" aria-label="Undo">↶<span class="undoTxt"> Undo</span></button><button class="btn small" id="redoBtn" data-act="redo" title="Redo" aria-label="Redo">↷<span class="undoTxt"> Redo</span></button>'
    +(D.views.length?'<select class="field rpick" id="viewSel" data-f="viewSel" aria-label="Tile view" style="flex:0 1 170px"><option value="">'+(currentView()?'':'Unsaved layout')+'</option>'+D.views.map(function(v){return '<option value="'+v.id+'"'+(currentView()===v?' selected':'')+'>'+esc(v.name)+(D.startView===v.id?' ★':'')+'</option>'}).join('')+'</select>':'')
    +'<button class="btn small gearbtn" data-act="gearMenu" aria-expanded="'+gearOpen+'" aria-label="Tiles and layout" title="Tiles and layout">⚙</button><button class="btn small" data-act="moreMenu" aria-expanded="'+moreOpen+'" aria-label="Import and export" title="Import, export and print">⇅<span class="undoTxt"> Import / Export</span></button><button class="btn primary" id="saveBtn" data-act="save" hidden>Save</button></div>'
@@ -1785,7 +1786,7 @@ function exportPDF(){
   loadJsPDF().then(function(JsPDF){
     var doc=new JsPDF({unit:'pt',format:'letter'}),W=612,H=792,M=40,y=M,page=1;
     var ink=[21,26,45],muted=[91,98,130],acc=[217,45,99];
-    function foot(){doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(muted[0],muted[1],muted[2]);doc.text(pdfText(R.name||'Routine')+' · Cheer Routine Playbook',M,H-22);doc.text('Page '+page,W-M,H-22,{align:'right'})}
+    function foot(){doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(muted[0],muted[1],muted[2]);doc.text(pdfText(R.name||'Routine')+' · Cheerbook',M,H-22);doc.text('Page '+page,W-M,H-22,{align:'right'})}
     function newPage(){foot();doc.addPage();page++;y=M}
     function need(h){if(y+h>H-44)newPage()}
     function txt(t,size,style,color,x,maxW){doc.setFont('helvetica',style||'normal');doc.setFontSize(size);var c=color||ink;doc.setTextColor(c[0],c[1],c[2]);
@@ -2334,7 +2335,7 @@ function athPart(r,aid){return withR(r,function(){var f=flat(),i=R.athletes.find
 function renderAthlete(){
   if(app.contains(transportEl))document.body.appendChild(transportEl);
   applyTheme();var A=ENV.athlete,f=A.feed||{},p=D.profile||{};
-  var head='<header class="mtop"><span class="mbrand">'+(p.logo?'<img class="plogo" src="'+esc(BLOB(p.logo.id))+'" alt="">':'')+'</span><b class="mtitle">'+esc((f.team&&f.team.name)||'Team')+'</b>'
+  var head='<header class="mtop"><span class="mbrand">'+(p.logo?'<img class="plogo" src="'+esc(BLOB(p.logo.id))+'" alt="">':CB_LOGO)+'</span><b class="mtitle">'+esc((f.team&&f.team.name)||'Team')+'</b>'
     +'<span class="livepill'+(A.offline?' off':'')+'">'+(A.offline?'Offline copy':'● Live')+'</span>'+(ATH.pick?'<button class="mib" data-act="athMenu" aria-label="Options">⋯</button>':'')+'</header>';
   if(!D.routines.length){transportEl.hidden=true;app.innerHTML='<div class="mapp">'+head+'<div class="mpanel"><p class="empty">No routines for '+esc((f.team&&f.team.name)||'this team')+' yet. Check back after your coach adds one.</p></div></div>';return}
   var all=athAll(),me=ATH.pick&&all.find(function(a){return a.id===ATH.pick});
