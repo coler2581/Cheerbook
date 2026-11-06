@@ -113,23 +113,35 @@ function posOf(e,a,i){var p=e.pos[a.id];if(!p){p=defaultPos(i);e.pos[a.id]=p}ret
 function summary(e){var t=e.counts.map(function(c,i){return c?((i+1)+' '+c):''}).filter(Boolean).join(' · ');return t||'Empty — tap to fill in'}
 
 /* ---- undo / redo: whole-playbook snapshots, typing bursts merged ---- */
-var undoS=[],redoS=[],lastSnap=JSON.stringify(D),burst=0;
-function commitBurst(){if(burst){clearTimeout(burst);burst=0;lastSnap=JSON.stringify(D)}}
+/* each undo step is a copy of the whole playbook, so the stack is capped by size as well as count (big playbooks with many saved versions) */
+var undoS=[],redoS=[],lastSnap=JSON.stringify(D),burst=0,undoChars=0,UNDO_MAX_CHARS=24e6;
+function pushUndo(s){undoS.push(s);undoChars+=s.length;while(undoS.length>1&&(undoS.length>80||undoChars>UNDO_MAX_CHARS))undoChars-=undoS.shift().length}
+function popUndo(){var s=undoS.pop();undoChars-=s.length;return s}
+/* this device's copy: written once a burst of edits settles (not on every keystroke), and right away when the page is hidden or closed.
+   If the browser refuses it (storage full), the stale copy and its sync fingerprints are removed, so a reload takes the shared copy
+   instead of pushing an older local one over it. */
+var localOK=true,localPending=false;
+function saveLocal(s){localPending=false;
+  try{localStorage.setItem(LS,s==null?JSON.stringify(D):s);localOK=true}
+  catch(e){var was=localOK;localOK=false;try{localStorage.removeItem(LS);localStorage.removeItem(LS_BASE)}catch(x){}
+    if(was&&!sync.on)flash('This playbook is too big to keep on this device. Use Import / Export to save a copy.')}}
+function saveBase(){if(!localOK)return;try{localStorage.setItem(LS_BASE,JSON.stringify(sync.base))}catch(e){}}
+function flushLocal(){if(localPending){if(burst)commitBurst();else saveLocal(lastSnap)}}
+function commitBurst(){if(burst){clearTimeout(burst);burst=0;lastSnap=JSON.stringify(D);if(localPending)saveLocal(lastSnap)}}
 function markDirty(){
-  if(!burst){undoS.push(lastSnap);if(undoS.length>80)undoS.shift();redoS=[]}else clearTimeout(burst);
-  burst=setTimeout(function(){burst=0;lastSnap=JSON.stringify(D);updateUndo()},800);
-  D.editedAt=Date.now();dirty=true;
+  if(!burst){pushUndo(lastSnap);redoS=[]}else clearTimeout(burst);
+  burst=setTimeout(function(){burst=0;lastSnap=JSON.stringify(D);if(localPending)saveLocal(lastSnap);updateUndo()},800);
+  D.editedAt=Date.now();dirty=true;localPending=true;
   if(view==='editor'&&R){R.updated=Date.now();if(R.teamId)pushTeamFromRoutine(R)}
   if(R.sample){R.sample=false;var b=document.getElementById('banner');if(b)b.hidden=true}
-  try{localStorage.setItem(LS,JSON.stringify(D))}catch(e){}
   updateStatus();updateUndo();scheduleSync();
 }
 function applySnap(s){var keep=D.savedAt;D=JSON.parse(s);D.savedAt=keep;lastSnap=s;
   R=D.routines.find(function(r){return r.id===D.cur})||D.routines[0];D.cur=R.id;find(cur);
-  D.editedAt=Date.now();dirty=true;try{localStorage.setItem(LS,JSON.stringify(D))}catch(e){}
+  D.editedAt=Date.now();dirty=true;saveLocal();
   range=null;loadAudio();buildVideos();render();scheduleSync()}
-function undo(){commitBurst();if(!undoS.length)return;if(playing)pause();redoS.push(JSON.stringify(D));applySnap(undoS.pop());flash('Undone.')}
-function redo(){commitBurst();if(!redoS.length)return;if(playing)pause();undoS.push(JSON.stringify(D));applySnap(redoS.pop());flash('Redone.')}
+function undo(){commitBurst();if(!undoS.length)return;if(playing)pause();redoS.push(JSON.stringify(D));applySnap(popUndo());flash('Undone.')}
+function redo(){commitBurst();if(!redoS.length)return;if(playing)pause();pushUndo(JSON.stringify(D));applySnap(redoS.pop());flash('Redone.')}
 function updateUndo(){var u=document.getElementById('undoBtn'),r=document.getElementById('redoBtn');if(u)u.disabled=!undoS.length&&!burst;if(r)r.disabled=!redoS.length}
 
 /* ---- personal tile layout (kept on this device) ---- */
@@ -282,15 +294,19 @@ function posAtBeat(b,f){
   R.athletes.forEach(function(x,i){var p=posOf(a,x,i),q=posOf(e,x,i);o[x.id]=a===e?q:clampMat(pathAt(p,q,(e.bend||{})[x.id],moveT(e,x.id,u)))});
   return o;
 }
+var liveCountKey='';
 function updateLive(force){
   var f=flat();if(!f.length)return;
   var b=beatAt(T),k=Math.floor(b/8),count=b>=0?Math.floor(b-8*k)+1:0,inRange=b>=0&&k<f.length,kk=Math.max(0,Math.min(f.length-1,k));
   if(playing||force){if(f[kk].e.id!==cur||force){cur=f[kk].e.id;refreshCurrent()}}
   liveBeat=b-8*Math.max(0,Math.min(f.length-1,k));
   if(playing)renderMat(posAtBeat(b,f));else if(force)renderMat();
-  document.querySelectorAll('.cell').forEach(function(c,i){c.classList.toggle('now',inRange&&i===count-1)});
-  var pips=document.getElementById('pips');
-  if(pips)Array.prototype.forEach.call(pips.children,function(p,i){p.className=inRange?(i===count-1?'on':(i<count-1?'past':'')):''});
+  /* the count highlights only change 8 times per 8-count, not every frame */
+  var ck0=(inRange?count:0)+'|'+kk;
+  if(force||ck0!==liveCountKey){liveCountKey=ck0;
+    document.querySelectorAll('.cell').forEach(function(c,i){c.classList.toggle('now',inRange&&i===count-1)});
+    var pips=document.getElementById('pips');
+    if(pips)Array.prototype.forEach.call(pips.children,function(p,i){p.className=inRange?(i===count-1?'on':(i<count-1?'past':'')):''})}
   var nl=document.getElementById('nowLbl');
   if(nl)nl.textContent=b<0?('Count 1 in '+(-(b*spb())).toFixed(1)+'s'):(k>=f.length?'End of routine':(secLabel(f[kk].s)+' · 8-count '+(kk+1)+' · count '+count));
   var ck=document.getElementById('clock');if(ck)ck.textContent=fmtT(T)+' / '+fmt(total());
@@ -936,6 +952,7 @@ function themeIcon(){var t=L.theme||'system';return t==='light'?'☀':t==='dark'
 function themeName(){var t=L.theme||'system';return t==='light'?'Light':t==='dark'?'Dark':'Match device'}
 function H(t){return '<p class="note help">'+t+'</p>'}
 function render(){
+  liveCountKey='';matFast=null;
   if(ATHLETE){renderAthlete();return}
   if(app.contains(transportEl))document.body.appendChild(transportEl);
   transportEl.hidden=view!=='editor';if(view!=='editor'){renderPage();return}
@@ -1182,8 +1199,13 @@ function updateMeta(){var n=flat().length, secs=routineSecs();
 function maxSecs(){return (SHEETS[R.sheet.tpl]||SHEETS.allstar).max}
 function updateSong(){var a=document.getElementById('songLink');if(!a)return;var u=R.music||'',ok=/^https?:\/\/\S+\.\S+/i.test(u);
   a.hidden=!ok;if(ok){a.href=u;a.textContent=/youtu\.?be/i.test(u)?'Open on YouTube':'Open link'}}
+/* during playback only the dots move, so once a full draw has been done for this 8-count, later frames just move the dots */
+var matFast=null;
 function renderMat(override){
   var g=document.getElementById('dots'),gh=document.getElementById('ghosts');if(!g)return;
+  if(override&&matFast&&matFast.cur===cur&&matFast.g===g&&matFast.n===R.athletes.length&&!GROUPS_ON){
+    for(var fi=0;fi<matFast.els.length;fi++){var fe=matFast.els[fi],fp=override[fe.id];if(fp)fe.node.setAttribute('transform','translate('+fp[0].toFixed(2)+' '+fp[1].toFixed(2)+')')}
+    renderFront(override);return}
   var it=find(cur), prev=it.n>0?it.list[it.n-1].e:null, html='', ghosts='', sp=spotAth();
   var mcl=document.getElementById('mat'),crowd=R.athletes.length>20&&!!mcl&&/small|tiny/.test(mcl.getAttribute('class')||'');
   R.athletes.forEach(function(a,i){
@@ -1219,6 +1241,7 @@ function renderMat(override){
     tf.innerHTML=th;
     if(tb)tb.innerHTML=list.length?'<div class="traf" role="status"><b>⚠ '+list.length+' traffic '+(list.length>1?'issues':'issue')+' in this 8-count</b><ul>'+list.map(function(w){return '<li>'+esc(w.text)+'</li>'}).join('')+'</ul><p class="note help">Bend a path by dragging its round handle, or move someone to a different spot.</p></div>':''}
   renderFront(override||null);
+  matFast=override?{cur:cur,g:g,n:R.athletes.length,els:Array.prototype.map.call(g.children,function(n){return {id:n.getAttribute('data-id'),node:n}})}:null;
 }
 function refreshTraffic(){var t=L.traffic!==false?allTraffic():{total:0};
   document.querySelectorAll('.erow').forEach(function(r){var lbl=r.querySelector('.lbl');if(!lbl)return;var old=lbl.querySelector('.tw'),n=(t[r.dataset.id]||[]).length;
@@ -1782,7 +1805,7 @@ function endRowDrag(){var d=rdrag;rdrag=null;var el=d.el;if(!reduceMotion)el.sty
     var next=Array.prototype.map.call(document.querySelectorAll('.sec'),function(sc){return {id:sc.dataset.sec,ids:Array.prototype.map.call(sc.querySelectorAll('.eights>li'),function(li){return li.dataset.eight})}});
     if(next.some(function(x){return !x.ids.length})){flash('Each section needs at least one 8-count.');setTimeout(render,220);return}
     next.forEach(function(x){var s=R.sections.find(function(q){return q.id===x.id});activeVar(s).eights=x.ids.map(function(i){return byId[i]})})}
-  markDirty();setTimeout(function(){render();lastK=-2;updateLive(!playing)},220)}
+  markDirty();setTimeout(function(){render();updateLive(!playing)},220)}
 function moveRowKey(kind,id,dir){
   if(kind==='sec'){var i=R.sections.findIndex(function(s){return s.id===id}),j=i+dir;if(j<0||j>=R.sections.length)return;var s=R.sections.splice(i,1)[0];R.sections.splice(j,0,s)}
   else{var it=find(id),list=ev(it.s),k=it.ei+dir;
@@ -1793,7 +1816,7 @@ function moveRowKey(kind,id,dir){
 
 /* ---- PDF export of count sheets and formations ---- */
 function loadJsPDF(){return new Promise(function(res,rej){if(window.jspdf&&window.jspdf.jsPDF)return res(window.jspdf.jsPDF);
-  var sc=document.createElement('script');sc.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+  var sc=document.createElement('script');sc.src='lib/jspdf.umd.min.js';
   sc.onload=function(){window.jspdf&&window.jspdf.jsPDF?res(window.jspdf.jsPDF):rej(new Error('load'))};sc.onerror=function(){rej(new Error('load'))};document.head.appendChild(sc)})}
 function pdfText(t){return String(t==null?'':t).replace(/[‘’]/g,"'").replace(/[“”]/g,'"').replace(/[^\x09\x0A\x0D\x20-\x7E -ÿ–—•]/g,'')}
 function hexRGB(h){h=String(h).replace('#','');return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]}
@@ -1913,11 +1936,11 @@ function reconcile(){
     else if(((rm&&rm.at)||0)>(D.editedAt||0))applied.push(k);else pushes.push(k)});
   if(applied.length){if(interacting()){deferred=true}else applyRemote(applied)}
   sync.pending=false;sync.offline=sync.cached;
-  try{localStorage.setItem(LS_BASE,JSON.stringify(sync.base))}catch(e){}
+  saveBase();
   if(deferred){clearTimeout(sync.retry);sync.retry=setTimeout(reconcile,1500)}
   if(pushes.length&&!readOnly){pushes.sort(function(a,b){return (a==='m')-(b==='m')});pushDocs(pushes,loc,lh)}else updateStatus()}
 function pushDocs(keys,loc,lh){sync.busy=true;sync.err=null;updateStatus();var i=0;
-  function done(){sync.busy=false;try{localStorage.setItem(LS_BASE,JSON.stringify(sync.base))}catch(e){}
+  function done(){sync.busy=false;saveBase();
     if(mediaMsg&&/Saving…$/.test(mediaMsg.text))setMsg(null);updateStatus();if(sync.again){sync.again=false;scheduleSync(200)}}
   function next(){
     if(i>=keys.length){done();return}
@@ -1952,7 +1975,7 @@ function applyRemote(keys){
   gone.forEach(function(k){var id=k.slice(2),i=D.routines.findIndex(function(r){return r.id===id});if(i>=0&&D.routines.length>1){D.routines.splice(i,1);delete sync.base[k]}});
   var fixed=ensureTeams();
   R=D.routines.find(function(r){return r.id===curId&&!r.deletedAt})||liveRoutines()[0]||D.routines[0];D.cur=R.id;find(cur);if(fixed)setTimeout(function(){scheduleSync(300)},0);
-  lastSnap=JSON.stringify(D);try{localStorage.setItem(LS,lastSnap)}catch(e){}
+  lastSnap=JSON.stringify(D);saveLocal(lastSnap);
   if(R.sample===false){var bn=document.getElementById('banner');if(bn)bn.hidden=true}
   if(sig(R)!==before){loadAudio();buildVideos()}
   render()}
@@ -1961,16 +1984,18 @@ function watchDocs(t){
   sync.unsub.push(ref.onSnapshot(function(snap){
     if(snap.metadata&&snap.metadata.hasPendingWrites)return;
     if(t==='m'){var d=snap.exists?snap.data():null;if(d&&d.data&&typeof d.data==='object')sync.remote.m={h:hsh(canon(d.data)),at:d.at||0,data:d.data};else delete sync.remote.m}
-    else{Object.keys(sync.remote).forEach(function(k){if(k.charAt(0)===t)delete sync.remote[k]});
-      snap.docs.forEach(function(d){var b=d.data();if(b&&b.data&&typeof b.data==='object')sync.remote[t+':'+d.id]={h:hsh(canon(b.data)),at:b.at||0,data:b.data}})}
+    else{var prevRm={};Object.keys(sync.remote).forEach(function(k){if(k.charAt(0)===t){prevRm[k]=sync.remote[k];delete sync.remote[k]}});
+      /* documents whose revision hasn't moved keep their parsed copy and hash, so one edit doesn't re-hash the whole collection */
+      snap.docs.forEach(function(d){var k=t+':'+d.id,old=prevRm[k];if(old&&d.rev!=null&&old.rev===d.rev){sync.remote[k]=old;return}
+        var b=d.data();if(b&&b.data&&typeof b.data==='object')sync.remote[k]={h:hsh(canon(b.data)),at:b.at||0,data:b.data,rev:d.rev}})}
     sync.cached=!!(snap.metadata&&snap.metadata.fromCache);
     if(!sync.cached)sync.defin[t]=true;
     if(syncReady())scheduleSync(sync.first?0:300);sync.first=false;
   },function(){sync.err='lost';updateStatus()}))}
 function startSync(db){dbApi=db;sync.on=true;sync.first=true;updateStatus();['m','r','v','t','k'].forEach(watchDocs)}
 function flushSync(){if(sync.on&&sync.timer){clearTimeout(sync.timer);sync.timer=0;reconcile()}}
-document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')flushSync()});
-window.addEventListener('pagehide',flushSync);
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden'){flushLocal();flushSync()}});
+window.addEventListener('pagehide',function(){flushLocal();flushSync()});
 document.addEventListener('focusout',function(){if(sync.on&&sync.pending)scheduleSync(400)});
 
 /* ---- automatic beat detection: tempo and where count 1 lands, found from the song itself (tap tempo stays as the fallback) ----
@@ -2028,7 +2053,7 @@ function producerRows(){
     rows.push([String(n+1),sec].concat(r.e.counts.map(function(c){return c||''})).concat([String(r.e.note||'').replace(/\s+/g,' ').trim()]))});
   return rows}
 function csvOf(rows){return rows.map(function(r){return r.map(function(c){c=String(c==null?'':c);if(/^[=+\-@]/.test(c))c="'"+c;return /[",\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c}).join(',')}).join('\r\n')}
-function loadXLSX(){return new Promise(function(res,rej){if(window.XLSX)return res(window.XLSX);var sc=document.createElement('script');sc.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+function loadXLSX(){return new Promise(function(res,rej){if(window.XLSX)return res(window.XLSX);var sc=document.createElement('script');sc.src='lib/xlsx.full.min.js';
   sc.onload=function(){window.XLSX?res(window.XLSX):rej(new Error('load'))};sc.onerror=function(){rej(new Error('load'))};document.head.appendChild(sc)})}
 function exportProducer(kind){
   if(!downloadsApi){flash('Saving files isn’t available in this view. Open the playbook in claude.ai to export.');return}
@@ -2334,10 +2359,14 @@ function athFeedData(f){
   return {v:3,savedAt:0,editedAt:0,cur:rs[0]?rs[0].id:null,routines:rs,views:[],templates:[],teams:[],profile:{program:f.programName||'',logo:f.logo?{id:f.logo}:null}}}
 function athAll(){var seen={},out=[];D.routines.forEach(function(r){r.athletes.forEach(function(a){if(!seen[a.id]){seen[a.id]=1;out.push(a)}})});return out.sort(function(a,b){return String(a.name).localeCompare(String(b.name))})}
 function athPickKey(){return 'cpbeta-athpick-'+ENV.athlete.token}
-function athApply(f){var keepR=R&&R.id,keepT=T;D=athFeedData(f);
+/* what the athlete actually sees; a new stamp with the same content (an edit elsewhere in the program) changes nothing on screen */
+function athSig(f){return JSON.stringify([f.routines,f.order,f.team,f.programName,f.logo])}
+var athLastSig=ATHLETE?athSig(ENV.athlete.feed||{}):'';
+function athApply(f){var sg=athSig(f);if(sg===athLastSig)return;athLastSig=sg;
+  var keepR=R&&R.id,keepT=T,keepAudio=R&&R.audio&&R.audio.id;D=athFeedData(f);
   if(!D.routines.length){R=null;render();return}
   R=D.routines.find(function(r){return r.id===keepR})||D.routines[0];D.cur=R.id;var f0=flat();if(!f0.some(function(x){return x.e.id===cur}))cur=f0[0].e.id;
-  loadAudio();T=Math.min(keepT,total());render();flash('Updated: your coach just changed the routine.')}
+  if((R.audio&&R.audio.id)!==keepAudio||R.id!==keepR)loadAudio();T=Math.min(keepT,total());render();flash('Updated: your coach just changed the routine.')}
 function athUpdate(f){if(playing||RUN){ATH.pending=f;return}athApply(f)}
 function athSwitchRoutine(id){var r=D.routines.find(function(x){return x.id===id});if(!r)return;if(playing)pause();R=r;D.cur=r.id;cur=flat()[0].e.id;T=0;loadAudio();render()}
 function athPart(r,aid){return withR(r,function(){var f=flat(),i=R.athletes.findIndex(function(z){return z.id===aid});if(i<0)return '<p class="note">You’re not in this routine.</p>';var ath=R.athletes[i];
@@ -2407,7 +2436,11 @@ function runOpen(auto){if(RUN)return;if(!flat().length)return;
   document.body.appendChild(ov);document.body.classList.add('running');
   var cv=ov.querySelector('canvas'),g=cv.getContext('2d'),sel0=ov.querySelector('.rsel'),pb=ov.querySelector('.play');
   RUN={ov:ov,auto:!!auto,raf:0,spot:L.spot||'',idle:0};
-  var draw=function(){if(!RUN)return;drawVideoFrame(g,1280,720,T,RUN.spot);pb.textContent=playing?'❚❚':'▶';RUN.raf=requestAnimationFrame(draw)};draw();
+  /* redraw every frame while playing; while paused, only when something changed (and twice a second for live updates), so an open run-through doesn't drain the battery */
+  var lastKey='',lastAt=0;
+  var draw=function(now){if(!RUN)return;now=now||performance.now();var key=T+'|'+RUN.spot+'|'+cur+'|'+(R&&R.id)+'|'+playing;
+    if(playing||key!==lastKey||now-lastAt>500){lastKey=key;lastAt=now;drawVideoFrame(g,1280,720,T,RUN.spot);var pt=playing?'❚❚':'▶';if(pb.textContent!==pt)pb.textContent=pt}
+    RUN.raf=requestAnimationFrame(draw)};draw();
   var step=function(d){var it=find(cur),n=Math.max(0,Math.min(it.list.length-1,it.n+d));cur=it.list[n].e.id;seek(eightStart(n))};
   ov.addEventListener('click',function(e){var b=e.target.closest('[data-r]');if(!b){if(e.target===cv)play();showBar();return}var r=b.dataset.r;
     if(r==='close')runClose();else if(r==='play')play();else if(r==='prev')step(-1);else if(r==='next')step(1);showBar()});

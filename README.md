@@ -34,7 +34,7 @@ This is the standalone beta of the playbook first built inside Claude. It is a s
 
 ## Setup (one time)
 
-1. **Database.** In Supabase, open **SQL Editor → New query**, paste all of `supabase/schema.sql`, and press **Run**. It is safe to run again later.
+1. **Database.** In Supabase, open **SQL Editor → New query**, paste all of `supabase/schema.sql`, and press **Run**. It is safe to run again later, and it should be run again whenever `schema.sql` changes.
 2. **Sign-in settings.** In Supabase, open **Authentication**:
    - **Sign In / Providers → Email:** keep Email on, and turn **Confirm email off** for the beta. Supabase's built-in email only reaches your own Supabase team members, at 2 emails an hour, so new coaches couldn't confirm otherwise. Password sign-in then works with no email service.
    - **URL Configuration:** set **Site URL** to your Vercel address (e.g. `https://cheerbook.vercel.app`), and add the same address under **Redirect URLs**.
@@ -62,7 +62,7 @@ This is the standalone beta of the playbook first built inside Claude. It is a s
 | `config.js` | Supabase settings |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Installable app and offline support |
 | `supabase/schema.sql` | Tables, access rules, athlete-link functions and storage rules |
-| `lib/` | supabase-js 2.117.1, qrcode-generator 1.4.4 and mp4-muxer 5.2.2 (bundled, so the app also works offline) |
+| `lib/` | supabase-js 2.117.1, qrcode-generator 1.4.4, mp4-muxer 5.2.2, jsPDF 2.5.1 (PDF export) and SheetJS 0.18.5 (producer count sheet), bundled so the app also works offline |
 
 ## How data is protected
 - **Coaches:** only coaches in a program can read or change its routines, enforced by row-level security in the database.

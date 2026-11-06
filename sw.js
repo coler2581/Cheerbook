@@ -1,7 +1,7 @@
 /* Cheerbook Beta service worker: makes the app installable and lets it open with no signal.
    App files: network first (so updates arrive right away), falling back to the saved copy offline.
    Songs and logos: saved copy first (they never change once uploaded). Supabase data and sign-in always go to the network. */
-var VERSION='cp-beta-0.9.1';
+var VERSION='cp-beta-0.9.2';
 var SHELL=['./','index.html','app.css','beta.css','app.js','platform.js','config.js','lib/supabase.js','lib/qrcode.js','lib/mp4-muxer.js','manifest.webmanifest','icons/icon-192.png','icons/icon-512.png','icons/logo.svg'];
 self.addEventListener('install',function(e){e.waitUntil(caches.open(VERSION).then(function(c){return c.addAll(SHELL)}).then(function(){return self.skipWaiting()}))});
 self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(ks){return Promise.all(ks.filter(function(k){return k!==VERSION&&k!=='cp-media'&&k!=='cp-fonts'}).map(function(k){return caches.delete(k)}))}).then(function(){return self.clients.claim()}))});
