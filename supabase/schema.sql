@@ -46,6 +46,10 @@ create table if not exists public.docs (
   constraint docs_body_size check (body is null or pg_column_size(body) < 600000)
 );
 create index if not exists docs_program_rev on public.docs (program_id, rev);
+-- the team a routine belongs to, kept as its own column so the athlete link's check every few seconds never has to open routine bodies
+alter table public.docs add column if not exists team_ref text
+  generated always as (case when coll = 'routines' and not deleted then body -> 'data' ->> 'teamId' end) stored;
+create index if not exists docs_team_ref on public.docs (program_id, team_ref) where team_ref is not null;
 
 -- team links for the athlete live view: anyone holding the token can read that team's routines, nothing else
 create table if not exists public.team_links (
@@ -171,11 +175,15 @@ language sql stable security definer set search_path = public as $$
   where m.user_id = auth.uid() order by p.created_at
 $$;
 
--- cheap check the athlete view polls every few seconds: changes whenever the team's routines change
-create or replace function public.athlete_stamp(p_token text) returns bigint
+-- cheap check the athlete view polls every few seconds. It changes only when this team's routines, the team itself or the
+-- playbook settings change (including a routine joining or leaving the team), not on every edit anywhere in the program.
+drop function if exists public.athlete_stamp(text);
+create function public.athlete_stamp(p_token text) returns text
 language sql stable security definer set search_path = public as $$
-  select coalesce(max(d.rev), 0) from public.docs d join public.team_links l on l.program_id = d.program_id
-  where l.token = p_token and l.enabled and d.coll in ('routines', 'teams', 'pb')
+  select md5(coalesce(string_agg(d.coll || '/' || d.id || ':' || d.rev, ',' order by d.coll, d.id), ''))
+  from public.team_links l join public.docs d on d.program_id = l.program_id
+  where l.token = p_token and l.enabled
+    and ((d.coll = 'pb' and d.id = 'meta') or (d.coll = 'teams' and d.id = l.team_id) or (d.coll = 'routines' and d.team_ref = l.team_id))
 $$;
 
 -- athlete live view: the team's current routines, cut down to what an athlete needs (no scoresheet, versions, skills or coach notes about athletes)
@@ -186,8 +194,7 @@ language sql stable security definer set search_path = public as $$
   tm as (select d.body -> 'data' as t from public.docs d join l on d.program_id = l.program_id where d.coll = 'teams' and d.id = l.team_id and not d.deleted),
   rs as (
     select d.body -> 'data' as r from public.docs d join l on d.program_id = l.program_id
-    where d.coll = 'routines' and not d.deleted
-      and d.body -> 'data' ->> 'teamId' = l.team_id
+    where d.coll = 'routines' and d.team_ref = l.team_id
       and (d.body -> 'data' ->> 'deletedAt') is null
       and coalesce(d.body -> 'data' ->> 'archived', 'false') <> 'true'
   )
@@ -200,7 +207,7 @@ language sql stable security definer set search_path = public as $$
     'routines', coalesce((select jsonb_agg(jsonb_build_object(
         'id', r ->> 'id', 'name', r -> 'name', 'bpm', r -> 'bpm', 'musicStart', r -> 'musicStart', 'audio', r -> 'audio',
         'athletes', r -> 'athletes', 'groups', r -> 'groups', 'sections', r -> 'sections', 'teamId', r -> 'teamId', 'updated', r -> 'updated')) from rs), '[]'::jsonb),
-    'stamp', public.athlete_stamp(p_token)::text
+    'stamp', public.athlete_stamp(p_token)
   ) end
 $$;
 

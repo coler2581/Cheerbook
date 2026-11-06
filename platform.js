@@ -56,13 +56,15 @@ function makeDb(pid){
   var rows={},listeners=[],loaded=false,maxRev=0,chan=null,pollT=0;
   function split(path){var i=path.lastIndexOf('/');return {coll:path.slice(0,i),id:path.slice(i+1)}}
   function key(c,i){return c+'/'+i}
-  function take(r){var k=key(r.coll,r.id),old=rows[k],rv=Number(r.rev)||0;if(old&&old.rev>=rv)return false;r.rev=rv;rows[k]=r;if(rv>maxRev)maxRev=rv;return true}
-  function emit(){if(!loaded)return;listeners.forEach(function(l){l()})}
+  /* changed collects the collections that changed since the last emit, so a routine edit doesn't rebuild every other collection's snapshot */
+  var changed={};
+  function take(r){var k=key(r.coll,r.id),old=rows[k],rv=Number(r.rev)||0;if(old&&old.rev>=rv)return false;r.rev=rv;rows[k]=r;if(rv>maxRev)maxRev=rv;changed[r.coll]=1;return true}
+  function emit(){if(!loaded)return;var ch=changed;changed={};listeners.slice().forEach(function(l){if(!l.coll||ch[l.coll])l()})}
   function fetchSince(){var q=sb.from('docs').select('coll,id,body,deleted,rev').eq('program_id',pid);if(maxRev)q=q.gt('rev',maxRev);
     return q.order('rev',{ascending:true}).limit(1000).then(function(r){if(r.error)throw r.error;var ch=false;(r.data||[]).forEach(function(x){if(take(x))ch=true});
       if((r.data||[]).length===1000)return fetchSince().then(function(c2){return ch||c2});return ch})}
   function start(){
-    fetchSince().then(function(){loaded=true;emit()}).catch(function(e){listeners.forEach(function(l){l.err&&l.err(e)})});
+    fetchSince().then(function(){loaded=true;listeners.slice().forEach(function(l){l()});changed={}}).catch(function(e){listeners.forEach(function(l){l.err&&l.err(e)})});
     chan=sb.channel('docs-'+pid).on('postgres_changes',{event:'*',schema:'public',table:'docs',filter:'program_id=eq.'+pid},function(p){var r=p.new;if(r&&r.coll){if(take(r))emit()}})
       .subscribe(function(st){if(st==='SUBSCRIBED'&&loaded)fetchSince().then(function(ch){if(ch)emit()}).catch(function(){})});
     /* safety net: if a live update is missed (sleep, bad signal), pick up anything newer every 20 s and when the app comes back to the front */
@@ -70,21 +72,22 @@ function makeDb(pid){
     document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')fetchSince().then(function(ch){if(ch)emit()}).catch(function(){})})}
   var started=false;function ensure(){if(!started){started=true;start()}}
   function snapDoc(k){var r=rows[k],body=r&&!r.deleted?r.body:null;var id=k.slice(k.lastIndexOf('/')+1);
-    return {id:id,exists:body!=null,data:function(){return body==null?undefined:JSON.parse(JSON.stringify(body))},metadata:{fromCache:false,hasPendingWrites:false}}}
+    return {id:id,rev:r?r.rev:null,exists:body!=null,data:function(){return body==null?undefined:JSON.parse(JSON.stringify(body))},metadata:{fromCache:false,hasPendingWrites:false}}}
   function write(path,body,deleted){var s=split(path),row={program_id:pid,coll:s.coll,id:s.id,body:deleted?null:body,deleted:!!deleted};
-    return sb.from('docs').upsert(row,{onConflict:'program_id,coll,id'}).select('coll,id,body,deleted,rev').then(function(r){if(r.error){var c=r.error.code==='42501'?'invalid_argument':'unavailable';throw err(c,r.error.message)}
-      if(r.data&&r.data[0]&&take(r.data[0]))setTimeout(emit,0)})}
+    /* ask only for the new revision back: the body is what we just sent, no need to download it again */
+    return sb.from('docs').upsert(row,{onConflict:'program_id,coll,id'}).select('coll,id,deleted,rev').then(function(r){if(r.error){var c=r.error.code==='42501'?'invalid_argument':'unavailable';throw err(c,r.error.message)}
+      var x=r.data&&r.data[0];if(x){x.body=row.body;if(take(x))setTimeout(emit,0)}})}
   return {
     doc:function(path){var s=split(path),k=key(s.coll,s.id);return {id:s.id,path:path,
       get:function(){return sb.from('docs').select('coll,id,body,deleted,rev').eq('program_id',pid).eq('coll',s.coll).eq('id',s.id).maybeSingle().then(function(r){if(r.data)take(r.data);return snapDoc(k)})},
       set:function(b){return write(path,b,false)},
       update:function(b){var cur=rows[k]&&rows[k].body||{};return write(path,Object.assign({},cur,b),false)},
       delete:function(){return write(path,null,true)},
-      onSnapshot:function(next,onErr){var l=function(){next(snapDoc(k))};l.err=onErr;listeners.push(l);ensure();if(loaded)setTimeout(l,0);return function(){listeners=listeners.filter(function(x){return x!==l})}}}},
+      onSnapshot:function(next,onErr){var l=function(){next(snapDoc(k))};l.err=onErr;l.coll=s.coll;listeners.push(l);ensure();if(loaded)setTimeout(l,0);return function(){listeners=listeners.filter(function(x){return x!==l})}}}},
     collection:function(coll){return {path:coll,doc:function(id){return this.parent.doc(coll+'/'+(id||hexId()))},
       onSnapshot:function(next,onErr){var l=function(){var docs=Object.keys(rows).filter(function(k){var r=rows[k];return r.coll===coll&&!r.deleted&&r.body!=null}).sort().map(snapDoc);
         next({docs:docs,size:docs.length,empty:!docs.length,metadata:{fromCache:false,hasPendingWrites:false},docChanges:function(){return []}})};
-        l.err=onErr;listeners.push(l);ensure();if(loaded)setTimeout(l,0);return function(){listeners=listeners.filter(function(x){return x!==l})}}}}}
+        l.err=onErr;l.coll=coll;listeners.push(l);ensure();if(loaded)setTimeout(l,0);return function(){listeners=listeners.filter(function(x){return x!==l})}}}}}
 }
 function cloudAssets(pid){
   return {upload:function(blob,o){var id=hexId(),type=(o&&o.type)||blob.type||'application/octet-stream';
