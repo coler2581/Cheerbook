@@ -1,4 +1,4 @@
-/* Cheer Playbook Beta: platform layer.
+/* Cheerbook Beta: platform layer.
    The app was first built inside Claude, where the page asks the host for a shared database, file storage, the viewer and downloads
    through window.claude.use(name). This file provides the same calls on top of Supabase (cloud mode), or on top of this device's own
    storage when no Supabase project is set up yet (local mode). It also handles signing in, programs and coaches, athlete links,
@@ -19,7 +19,7 @@ function token(){var a=new Uint8Array(12);crypto.getRandomValues(a);return btoa(
 function lsGet(k,d){try{var v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 function err(code,message){var e=new Error(message||code);e.code=code;return e}
-function screen(html){root.innerHTML='<div class="gate"><div class="gcard"><div class="gbrand"><span class="gmark">CP</span><b>Cheer Playbook</b><span class="devtag">Beta</span></div>'+html+'</div></div>'}
+function screen(html){root.innerHTML='<div class="gate"><div class="gcard"><div class="gbrand"><img class="gmark" src="icons/logo.svg" alt=""><b class="gword">cheer<span>book</span></b><span class="devtag">Beta</span></div>'+html+'</div></div>'}
 function bootApp(){if(ENV.booted)return;ENV.booted=true;root.innerHTML='';var s=document.createElement('script');s.src='app.js?v='+(CFG.version||'1');document.body.appendChild(s)}
 ENV.reload=function(){location.reload()};
 

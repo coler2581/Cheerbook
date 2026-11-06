@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Cheerbook">
+<rect width="160" height="160" rx="36" fill="#13234A"/>
+<g transform="translate(25 42) scale(0.5)">
+<path d="M110 40 C80 24 40 24 14 34 L14 140 C40 130 80 130 110 146 Z" fill="#FFFFFF"/>
+<path d="M110 40 C140 24 180 24 206 34 L206 140 C180 130 140 130 110 146 Z" fill="#DDE2EC"/>
+<circle cx="90" cy="86" r="8" fill="#13234A"/><circle cx="130" cy="86" r="8" fill="#13234A"/>
+<circle cx="64" cy="112" r="8" fill="#13234A"/><circle cx="92" cy="112" r="8" fill="#13234A"/><circle cx="128" cy="112" r="8" fill="#13234A"/><circle cx="156" cy="112" r="8" fill="#13234A"/>
+<circle cx="110" cy="60" r="11" fill="#FF4F9A"/>
+</g>
+</svg>
