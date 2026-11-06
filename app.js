@@ -257,7 +257,7 @@ function trafficFor(f,k){var e=f[k].e,a=k>0?f[k-1].e:null,out=[],N=33,paths={},m
     var len=0;for(var s1=1;s1<N;s1++)len+=Math.hypot(pts[s1][0]-pts[s1-1][0],pts[s1][1]-pts[s1-1][1]);moved[x.id]=len;
     if(a&&len/(8*spb())>SPRINT)out.push({type:'sprint',ids:[x.id],at:q,text:x.name.trim()+' travels '+Math.round(len)+' ft in one 8-count. That’s a full sprint.'})});
   for(var i=0;i<R.athletes.length;i++)for(var j=i+1;j<R.athletes.length;j++){var A=R.athletes[i],B=R.athletes[j];
-    if(A.group&&A.group===B.group)continue;var pa=paths[A.id],pb=paths[B.id],end=Math.hypot(pa[N-1][0]-pb[N-1][0],pa[N-1][1]-pb[N-1][1]);
+    if(GROUPS_ON&&A.group&&A.group===B.group)continue;var pa=paths[A.id],pb=paths[B.id],end=Math.hypot(pa[N-1][0]-pb[N-1][0],pa[N-1][1]-pb[N-1][1]);
     if(end<SAME_SPOT){out.push({type:'overlap',ids:[A.id,B.id],at:pa[N-1],text:A.name.trim()+' and '+B.name.trim()+' end up on the same spot.'});continue}
     if(!a||(moved[A.id]<.5&&moved[B.id]<.5))continue;
     var best=1e9,bs=0,startD=Math.hypot(pa[0][0]-pb[0][0],pa[0][1]-pb[0][1]);for(var s2=0;s2<N;s2++){var dd=Math.hypot(pa[s2][0]-pb[s2][0],pa[s2][1]-pb[s2][1]);if(dd<best){best=dd;bs=s2}}
@@ -270,7 +270,7 @@ function allTraffic(){var f=flat(),key=JSON.stringify([R.id,R.bpm,f.map(function
   if(trafficCache&&trafficCache.key===key)return trafficCache.v;var v={},n=0;f.forEach(function(r,k){var t=trafficFor(f,k);v[r.e.id]=t;n+=t.length});v.total=n;trafficCache={key:key,v:v};return v}
 /* bend handles: one per moving athlete, or one per stunt group that moves together */
 function bendTargets(e,prev){var out=[],done={},sp=spotAth();
-  R.groups.forEach(function(g){var ms=membersOf(g.id);if(ms.length<2)return;var d0=null,same=true;
+  RG().forEach(function(g){var ms=membersOf(g.id);if(ms.length<2)return;var d0=null,same=true;
     ms.forEach(function(a){var i=R.athletes.indexOf(a),p=posOf(prev,a,i),q=posOf(e,a,i),d=[q[0]-p[0],q[1]-p[1]];if(!d0)d0=d;else if(Math.abs(d[0]-d0[0])>.6||Math.abs(d[1]-d0[1])>.6)same=false});
     if(same&&Math.hypot(d0[0],d0[1])>.5&&(!sp||ms.indexOf(sp)>=0)){var lead=flyerOf(g.id)||ms[0];out.push({gid:g.id,ids:ms.map(function(a){return a.id}),lead:lead});ms.forEach(function(a){done[a.id]=1})}});
   R.athletes.forEach(function(a,i){if(done[a.id]||(sp&&sp!==a))return;var p=posOf(prev,a,i),q=posOf(e,a,i);if(Math.hypot(q[0]-p[0],q[1]-p[1])>.5)out.push({ids:[a.id],lead:a})});
@@ -324,7 +324,7 @@ var matWrap=document.createElement('div');matWrap.className='tbody';
    +'<label class="tog"><input type="checkbox" id="trafTog" data-f="traf" checked> Traffic warnings</label>'
    +'<button class="btn small" id="selBtn" data-act="selMode">Select athletes</button>'
    +'<label class="tog">Spotlight <select class="field" id="spotSel" data-f="spot" style="width:auto"></select></label>'
-   +'<button class="btn small" data-act="formAll" title="Every stunt group lines up for a lift in this 8-count">Form lifts</button></div>'
+   +(GROUPS_ON?'<button class="btn small" data-act="formAll" title="Every stunt group lines up for a lift in this 8-count">Form lifts</button>':'')+'</div>'
    +'<div class="ctl ftools"><span class="fl">Formation</span><button class="btn small" data-act="fCopy" title="Copy this 8-count’s formation">Copy</button><button class="btn small" data-act="fPaste" title="Paste the copied formation into this 8-count (only the selected athletes, if any are selected)">Paste</button><button class="btn small" data-act="fMirror" title="Flip left to right (only the selected athletes, if any are selected)">Mirror ↔</button><button class="btn small" data-act="fLine" title="Put the selected athletes in a straight row or column">Line up</button><button class="btn small" data-act="fSpace" title="Space the selected athletes evenly">Space evenly</button></div>'
    +'<div class="selbar" id="selBar" hidden></div><div id="trafficBox"></div>'
    +'<div class="legend">'+ROLES.map(function(r){return '<span><i style="background:var(--'+r.toLowerCase()+')"></i>'+r+'</span>'}).join('')+'<span>Judges sit at the bottom, spots 1–9.</span></div>'
@@ -354,19 +354,19 @@ function sheetCats(){var sh=SHEETS[R.sheet.tpl]||SHEETS.allstar,cats=sh.cats.sli
 function sheetItems(){var out=[];sheetCats().forEach(function(c){out=out.concat(c.items)});return out}
 /* building notes (pyramid notation): per 8-count, each stunt group's skill and the count it hits, plus which groups connect */
 var STUNT_SKILLS=['Load','Prep','Extension','Lib','Heel stretch','Arabesque','Scale','Scorpion','Bow and arrow','Needle','Tick-tock','Full up','Cradle','Twist down','Thigh stand','Shoulder sit','Chair','Basket toss','Toe touch basket','Kick double basket'];
-function liveLinks(e){return (e.links||[]).filter(function(l){return R.groups.some(function(g){return g.id===l[0]})&&R.groups.some(function(g){return g.id===l[1]})})}
+function liveLinks(e){return (e.links||[]).filter(function(l){return RG().some(function(g){return g.id===l[0]})&&RG().some(function(g){return g.id===l[1]})})}
 function isLinked(e,a,b){return liveLinks(e).some(function(l){return (l[0]===a&&l[1]===b)||(l[0]===b&&l[1]===a)})}
 function flyerOf(gid){var ms=membersOf(gid);return ms.find(function(a){return a.role==='Flyer'})||ms[0]||null}
 function buildText(e){var b=e.build||{},lk=liveLinks(e),parent={};
-  R.groups.forEach(function(g){parent[g.id]=g.id});function root(x){while(parent[x]!==x)x=parent[x];return x}
+  RG().forEach(function(g){parent[g.id]=g.id});function root(x){while(parent[x]!==x)x=parent[x];return x}
   lk.forEach(function(l){parent[root(l[0])]=root(l[1])});var comps={},order=[];
-  R.groups.forEach(function(g){var has=b[g.id]&&b[g.id].skill,linked=lk.some(function(l){return l[0]===g.id||l[1]===g.id});if(!has&&!linked)return;
+  RG().forEach(function(g){var has=b[g.id]&&b[g.id].skill,linked=lk.some(function(l){return l[0]===g.id||l[1]===g.id});if(!has&&!linked)return;
     var r=root(g.id);if(!comps[r]){comps[r]=[];order.push(r)}comps[r].push(g)});
   return order.map(function(r){var gs=comps[r],t=gs.map(function(g){var x=b[g.id]||{};return g.name+' '+(x.skill||'?')+(x.count?' ('+x.count+')':'')}).join(' ⟷ ');return gs.length>1?'Pyramid: '+t:t}).join(' · ')}
 function derivedTags(e){var b=e.build||{},stunt=false,toss=false,out=[];
-  R.groups.forEach(function(g){var x=b[g.id];if(x&&x.skill){if(/toss|basket/i.test(x.skill))toss=true;else stunt=true}});
+  RG().forEach(function(g){var x=b[g.id];if(x&&x.skill){if(/toss|basket/i.test(x.skill))toss=true;else stunt=true}});
   if(stunt)out.push('stunt');if(toss)out.push('toss');if(liveLinks(e).length)out.push('pyr');return out}
-function skillsNoted(){var seen={},out=[];flat().forEach(function(r){var b=r.e.build||{};R.groups.forEach(function(g){var x=b[g.id];if(x&&x.skill&&!/toss|basket/i.test(x.skill)){var k=x.skill.trim().toLowerCase();if(!seen[k]){seen[k]=1;out.push(x.skill.trim())}}})});return out}
+function skillsNoted(){var seen={},out=[];flat().forEach(function(r){var b=r.e.build||{};RG().forEach(function(g){var x=b[g.id];if(x&&x.skill&&!/toss|basket/i.test(x.skill)){var k=x.skill.trim().toLowerCase();if(!seen[k]){seen[k]=1;out.push(x.skill.trim())}}})});return out}
 function coverage(){var m={},keys={};sheetItems().forEach(function(x){keys[x.k]=1});
   flat().forEach(function(r,n){var ks={};(r.e.tags||[]).forEach(function(k){ks[k]=1});derivedTags(r.e).forEach(function(k){if(keys[k])ks[k]=1});
     Object.keys(ks).forEach(function(k){(m[k]=m[k]||[]).push({id:r.e.id,n:n+1})})});return m}
@@ -465,7 +465,7 @@ function sheetWarnings(cov){var w=[],secs=routineSecs(),mx=maxSecs();
   if(secs>mx+0.5)w.push('The routine runs about '+fmt(secs)+', over the '+fmt(mx)+' limit for this scoresheet.');
   if(R.sheet.tpl==='gameday'){var run=0,best=0,prev=-2;(cov.fightskill||[]).forEach(function(h){run=h.n===prev+1?run+1:1;prev=h.n;best=Math.max(best,run)});
     if(best>3)w.push('Fight song skills run '+best+' 8-counts in a row. Game Day allows up to 3 consecutive 8-counts.')}
-  if((cov.stunt||cov.pyr||cov.toss)&&!R.groups.length&&R.athletes.length)w.push('Stunts are planned but no stunt groups are set up yet. Groups make building sections easier to place on the mat.');
+  if(GROUPS_ON&&(cov.stunt||cov.pyr||cov.toss)&&!R.groups.length&&R.athletes.length)w.push('Stunts are planned but no stunt groups are set up yet. Groups make building sections easier to place on the mat.');
   return w}
 
 /* ---- rendering ---- */
@@ -580,12 +580,12 @@ function teamsPage(){
    +(D.teams.length?'<div class="cards">'+D.teams.map(function(t){var rs=routinesOf(t),fl=t.athletes.filter(function(a){return a.role==='Flyer'}).length;
       return '<div class="rcard"><button class="ropen" data-act="openTeam" data-id="'+t.id+'"><span class="tswatch">'+t.athletes.slice(0,12).map(function(a){return '<i style="background:var(--'+String(a.role).toLowerCase()+')"></i>'}).join('')+'</span>'
         +'<span class="rbody"><b>'+esc(t.name)+'</b><span class="sub">'+esc([t.level,t.season].filter(Boolean).join(' · ')||'No level set')+'</span>'
-        +'<span class="sub">'+t.athletes.length+' athletes · '+fl+' flyers · '+t.groups.length+' stunt groups</span><span class="sub">'+rs.length+' routine'+(rs.length===1?'':'s')+'</span></span></button></div>'}).join('')+'</div>'
+        +'<span class="sub">'+t.athletes.length+' athletes · '+fl+' flyers'+(GROUPS_ON?' · '+t.groups.length+' stunt groups':'')+'</span><span class="sub">'+rs.length+' routine'+(rs.length===1?'':'s')+'</span></span></button></div>'}).join('')+'</div>'
      :'<p class="empty">No teams yet. A team holds the roster that its routines share.</p>')
-   +H('Every routine for a team uses the same roster and stunt groups. Change a name or a group here and it changes in all of them.')+'</section>'}
+   +H('Every routine for a team uses the same roster. Change a name or role here and it changes in all of them.')+'</section>'}
 function teamPage(){var t=teamById(L.pTeam);if(!t){view='teams';return teamsPage()}
   var rs=routinesOf(t),roleOpts=function(r){return ROLES.map(function(x){return '<option'+(x===r?' selected':'')+'>'+x+'</option>'}).join('')};
-  var gOf=function(a){return t.groups.find(function(g){return g.id===a.group})};
+  var gOf=function(a){return GROUPS_ON?t.groups.find(function(g){return g.id===a.group}):null};
   return '<section class="page"><button class="btn small quiet" data-act="nav" data-id="teams">‹ Teams</button>'
    +'<input class="rname" id="tname" data-f="tname" value="'+esc(t.name)+'" aria-label="Team name" placeholder="Team name">'
    +'<div class="mrow"><label class="tog">Level <select class="field" data-f="tlevel">'+LEVELS.map(function(l){return '<option value="'+l+'"'+(t.level===l?' selected':'')+'>'+(l||'Not set')+'</option>'}).join('')+'</select></label>'
@@ -596,23 +596,24 @@ function teamPage(){var t=teamById(L.pTeam);if(!t){view='teams';return teamsPage
       return '<div class="ath tath"><span class="sw" style="background:var(--'+String(a.role).toLowerCase()+')">'+esc(initials(a.name))+'</span>'
        +'<input class="field aname" id="ta-'+a.id+'" data-f="tath" data-id="'+a.id+'" value="'+esc(a.name)+'" aria-label="Athlete name"'+(g?' style="color:'+g.color+';font-weight:700"':'')+'>'
        +'<select class="field" data-f="trole" data-id="'+a.id+'" aria-label="Role">'+roleOpts(a.role)+'</select>'
-       +'<select class="field" data-f="tgrp" data-id="'+a.id+'" aria-label="Stunt group"><option value="">No group</option>'+t.groups.map(function(x){return '<option value="'+x.id+'"'+(a.group===x.id?' selected':'')+'>'+esc(x.name)+'</option>'}).join('')+'<option value="__new">+ New group</option></select>'
+       +(GROUPS_ON?'<select class="field" data-f="tgrp" data-id="'+a.id+'" aria-label="Stunt group"><option value="">No group</option>'+t.groups.map(function(x){return '<option value="'+x.id+'"'+(a.group===x.id?' selected':'')+'>'+esc(x.name)+'</option>'}).join('')+'<option value="__new">+ New group</option></select>':'')
        +'<button class="btn small" data-act="openAth" data-id="'+a.id+'" title="Skills and notes">Profile'+(sk?' · '+sk:'')+' ›</button>'
        +'<button class="ib" data-act="tdelAth" data-id="'+a.id+'" aria-label="Remove '+esc(a.name)+'" title="Remove">✕</button></div>'}).join('')
      :'<p class="empty">No athletes yet.</p>')
    +'<div class="ctl"><button class="btn small" data-act="tAddAth">+ Add athlete</button></div></div>'
+   +(!GROUPS_ON?'':''
    +'<div class="card pcard"><div class="phead"><h2>Stunt groups</h2></div>'
    +(t.groups.length?t.groups.map(function(g){var ms=t.athletes.filter(function(a){return a.group===g.id});
       return '<div class="grow"><span class="gsw" style="background:'+g.color+'"></span><input class="field" id="tg-'+g.id+'" data-f="tgname" data-id="'+g.id+'" value="'+esc(g.name)+'" aria-label="Group name"><span class="sub">'+ms.map(function(a){return esc(a.name)}).join(', ')+'</span>'
        +'<span class="ctl"><button class="btn small quiet" data-act="tdelGrp" data-id="'+g.id+'">Ungroup</button></span></div>'}).join('')
-     :'<p class="note">No stunt groups. Pick “+ New group” next to an athlete to start one.</p>')+'</div>'
+     :'<p class="note">No stunt groups. Pick “+ New group” next to an athlete to start one.</p>')+'</div>')
    +'<div class="card pcard"><div class="phead"><h2>Routines</h2></div>'
    +(rs.length?'<div class="ctl">'+rs.map(function(r){return '<button class="btn small" data-act="openR" data-id="'+r.id+'">'+esc(r.name||'Untitled routine')+' ›</button>'}).join('')+'</div>':'<p class="note">No routines use this team yet.</p>')
    +'<div class="ctl"><button class="btn small" data-act="teamRoutine">+ New routine for this team</button><button class="btn small" data-act="partTeam">Athlete view ›</button>'
    +'<button class="btn small quiet" data-act="teamDel">Delete team</button></div></div>'
    +H('Positions on the mat stay with each routine. Removing an athlete here takes them out of every routine for this team.')+'</section>'}
 function athPage(){var t=teamById(L.pTeam),a=t&&t.athletes.find(function(x){return x.id===L.pAth});if(!a){view='team';return teamPage()}
-  var mine=t.skills[a.id]||{},g=t.groups.find(function(x){return x.id===a.group}),got=countSkills(mine),tot=0;
+  var mine=t.skills[a.id]||{},g=GROUPS_ON?t.groups.find(function(x){return x.id===a.group}):null,got=countSkills(mine),tot=0;
   var cats=SKILLS.map(function(c){var have=c[1].filter(function(k){return mine[k]}).length;tot+=c[1].length;
     return '<div class="card pcard"><div class="phead"><h2>'+esc(c[0])+'</h2><span class="sub">'+have+' of '+c[1].length+'</span></div><div class="skills">'
       +c[1].map(function(k){var d=mine[k];return '<label class="skill'+(d?' on':'')+'"><input type="checkbox" data-f="tskill" data-k="'+esc(k)+'"'+(d?' checked':'')+'> <span>'+esc(k)+'</span>'+(d?'<span class="sub">'+esc(d)+'</span>':'')+'</label>'}).join('')+'</div></div>'}).join('');
@@ -968,7 +969,7 @@ function render(){
     +'<button class="btn small quiet" data-act="tagsMore" aria-expanded="'+tagsOpen+'">'+(tagsOpen?'Done':(picked.length?'Edit':'+ Add'))+'</button></div>';
   var bt0=buildText(it.e);
   var hasB=Object.keys(it.e.build||{}).length||liveLinks(it.e).length;
-  var buildHtml=R.groups.length&&!hasB&&!bldOpen?'<div class="mgroup"><button class="btn small quiet" data-act="bldOpen" aria-expanded="false">▸ Building notes (who does what)</button></div>':R.groups.length?'<div class="bnote"><span class="fl">Building · who does what</span>'+R.groups.map(function(g){var x=(it.e.build||{})[g.id]||{},others=R.groups.filter(function(o){return o!==g});
+  var buildHtml=!GROUPS_ON?'':R.groups.length&&!hasB&&!bldOpen?'<div class="mgroup"><button class="btn small quiet" data-act="bldOpen" aria-expanded="false">▸ Building notes (who does what)</button></div>':R.groups.length?'<div class="bnote"><span class="fl">Building · who does what</span>'+R.groups.map(function(g){var x=(it.e.build||{})[g.id]||{},others=R.groups.filter(function(o){return o!==g});
       return '<div class="brow"><span class="gsw" style="background:'+g.color+'"></span><b class="bname">'+esc(g.name)+'</b>'
        +'<input class="field" id="bs-'+g.id+'" data-f="bskill" data-id="'+g.id+'" list="skillList" value="'+esc(x.skill||'')+'" placeholder="Skill, e.g. Lib" aria-label="'+esc(g.name)+' skill">'
        +'<label class="tog">hits on <select class="field num" id="bc-'+g.id+'" data-f="bcount" data-id="'+g.id+'" aria-label="'+esc(g.name)+' hits on count"><option value="0">–</option>'+[1,2,3,4,5,6,7,8].map(function(c){return '<option value="'+c+'"'+(x.count===c?' selected':'')+'>'+c+'</option>'}).join('')+'</select></label>'
@@ -1034,15 +1035,16 @@ function render(){
     return '<div class="ath"><button class="sw'+(L.spot===a.id?' lit':'')+'" id="sw-'+a.id+'" data-act="spot" data-id="'+a.id+'" aria-pressed="'+(L.spot===a.id)+'" aria-label="Spotlight '+esc(a.name)+'" title="Spotlight '+esc(a.name)+'" style="background:var(--'+a.role.toLowerCase()+')">'+esc(initials(a.name))+'</button>'
       +'<input class="field aname" id="ath-'+a.id+'" data-f="ath" data-id="'+a.id+'" value="'+esc(a.name)+'" aria-label="Athlete name"'+(groupOf(a)?' style="color:'+groupOf(a).color+';font-weight:700"':'')+'>'
       +'<select class="field" id="role-'+a.id+'" data-f="role" data-id="'+a.id+'" aria-label="Role">'+roleOpts(a.role)+'</select>'
-      +'<select class="field" id="agrp-'+a.id+'" data-f="agrp" data-id="'+a.id+'" aria-label="Stunt group"><option value="">No group</option>'+R.groups.map(function(g){return '<option value="'+g.id+'"'+(a.group===g.id?' selected':'')+'>'+esc(g.name)+'</option>'}).join('')+'<option value="__new">+ New group</option></select>'
+      +(GROUPS_ON?'<select class="field" id="agrp-'+a.id+'" data-f="agrp" data-id="'+a.id+'" aria-label="Stunt group"><option value="">No group</option>'+R.groups.map(function(g){return '<option value="'+g.id+'"'+(a.group===g.id?' selected':'')+'>'+esc(g.name)+'</option>'}).join('')+'<option value="__new">+ New group</option></select>':'')
       +'<button class="ib" data-act="delAth" data-id="'+a.id+'" aria-label="Remove '+esc(a.name)+'" title="Remove">✕</button></div>'}).join('')
     :'<p class="empty">No athletes yet. Add your team and they appear on the mat.</p>')
    +'<div class="ctl"><button class="btn small" data-act="addAth">+ Add athlete</button></div>'
    +H('Tap an athlete’s initials to spotlight them: their dot stands out on the mat, their path shows across every 8-count, and the count sheet lists their spot.')
+   +(!GROUPS_ON?'':''
    +'<div class="mgroup"><span class="fl">Stunt groups</span>'
    +(R.groups.length?R.groups.map(function(g){return '<div class="grow"><span class="gsw" style="background:'+g.color+'"></span><input class="field" id="grp-'+g.id+'" data-f="grp" data-id="'+g.id+'" value="'+esc(g.name)+'" aria-label="Group name">'
       +'<span class="sub">'+membersOf(g.id).map(function(a){return esc(a.name)}).join(', ')+'</span><span class="ctl"><button class="btn small" data-act="formLift" data-id="'+g.id+'" title="Flyer in the middle, bases either side, back spot behind">Set lift</button><button class="btn small quiet" data-act="delGrp" data-id="'+g.id+'">Ungroup</button></span></div>'}).join('')
-     :'<p class="note">No stunt groups yet. Pick a group next to each athlete, or drag a box around athletes on the mat.</p>')
+     :'<p class="note">No stunt groups yet. Pick a group next to each athlete, or drag a box around athletes on the mat.</p>'))
    +H('Grouped athletes line up for a lift and move together when you drag the group’s name tag on the mat. Drag a single athlete to move just them.')
    +'</div>';
   if(teamOf(R))team='<p class="note">This roster belongs to <b>'+esc(teamOf(R).name)+'</b>, so changes here update its other routines too. <button class="btn small quiet" data-act="openTeam" data-id="'+R.teamId+'">Manage team ›</button></p>'+team;
@@ -1105,7 +1107,7 @@ function render(){
      +'<label class="tog"><input type="checkbox" id="pfForm" checked> Formation diagram for each 8-count</label>'
      +'<label class="tog"><input type="checkbox" id="pfNotes" checked> Notes</label>'
      +'<label class="tog"><input type="checkbox" id="pfScore" checked> Scoresheet checklist</label>'
-     +'<label class="tog"><input type="checkbox" id="pfTeam" checked> Team and stunt groups</label>'
+     +'<label class="tog"><input type="checkbox" id="pfTeam" checked> Team</label>'
      +(spotAth()?'<label class="tog"><input type="checkbox" id="pfSpot" checked> Spotlight notes for '+esc(spotAth().name)+'</label>':'')
      +'<div class="ctl"><button class="btn small primary" data-act="pdfMake" id="pdfMakeBtn">Download PDF</button><button class="btn small quiet" data-act="pdfMenu">Close</button></div>'
      +H('Open the saved PDF to print it. Uses the routine on screen, with the versions of each section that are chosen.')+'</div>':'');
@@ -1242,7 +1244,7 @@ function renderFront(override){var sv=document.getElementById('front');if(!sv||L
   for(var k=0;k<9;k++){var nq=proj(3+k*6,42);h+='<text class="fnum" x="'+nq.x.toFixed(2)+'" y="'+(nq.y+2.4).toFixed(2)+'">'+(k+1)+'</text>'}
   h+='<text class="fcap" x="'+(br.x-.5).toFixed(2)+'" y="'+(br.y-1).toFixed(2)+'" style="text-anchor:end">BACK OF MAT</text><text class="fcap" x="1.5" y="2.6" style="text-anchor:start">FRONT VIEW · AS THE JUDGES SEE IT</text>';
   var lifted={},skills={};
-  R.groups.forEach(function(g){var gl=groupLevel(e,g.id,beat),fly=flyerOf(g.id);if(fly&&fly.role==='Flyer'&&gl.lv>0){lifted[fly.id]=gl.lv;skills[fly.id]=gl.skill}});
+  RG().forEach(function(g){var gl=groupLevel(e,g.id,beat),fly=flyerOf(g.id);if(fly&&fly.role==='Flyer'&&gl.lv>0){lifted[fly.id]=gl.lv;skills[fly.id]=gl.skill}});
   var people=R.athletes.map(function(a,i){var p=override?override[a.id]:posOf(e,a,i);return {a:a,p:p,q:proj(p[0],p[1])}});
   people.sort(function(m,n){return (m.p[1]+(lifted[m.a.id]?.5:0))-(n.p[1]+(lifted[n.a.id]?.5:0))});
   var top={};
@@ -1264,19 +1266,23 @@ function labelScale(){var m=document.getElementById('mat');return m&&m.classList
 var ghTap=null;
 function toggleBox(gid){var g=R.groups.find(function(x){return x.id===gid});if(!g)return;drag=null;if(g.noBox)delete g.noBox;else g.noBox=true;markDirty();renderMat();
   var ng=document.querySelector('#mat .ghandle[data-gid="'+gid+'"]');if(ng)ng.focus();flash(g.noBox?'Outline hidden for '+g.name+'. Double-tap the name to bring it back.':'Outline showing for '+g.name+'.')}
-function groupOf(a){return a.group?R.groups.find(function(g){return g.id===a.group}):null}
-function membersOf(gid){return R.athletes.filter(function(a){return a.group===gid})}
+/* Stunt groups are switched off: coaches select athletes (tap several, or draw a box) and move them together instead.
+   Saved group data is kept untouched, so turning GROUPS_ON back on restores it. */
+var GROUPS_ON=false;
+function RG(){return GROUPS_ON?R.groups:[]}
+function groupOf(a){return GROUPS_ON&&a.group?R.groups.find(function(g){return g.id===a.group}):null}
+function membersOf(gid){return GROUPS_ON?R.athletes.filter(function(a){return a.group===gid}):[]}
 function groupBoxes(posFn){var out='',ce=find(cur).e,cb=ce.build||{};
   liveLinks(ce).forEach(function(l){var fa=flyerOf(l[0]),fb=flyerOf(l[1]);if(!fa||!fb)return;var pa=posFn(fa,R.athletes.indexOf(fa)),pb=posFn(fb,R.athletes.indexOf(fb));if(!pa||!pb)return;
     out+='<line class="plink" x1="'+pa[0].toFixed(2)+'" y1="'+pa[1].toFixed(2)+'" x2="'+pb[0].toFixed(2)+'" y2="'+pb[1].toFixed(2)+'"/>'});
-  R.groups.forEach(function(g){var xs=[],ys=[];R.athletes.forEach(function(a,i){if(a.group!==g.id)return;var p=posFn(a,i);if(p){xs.push(p[0]);ys.push(p[1])}});if(!xs.length)return;
+  RG().forEach(function(g){var xs=[],ys=[];R.athletes.forEach(function(a,i){if(a.group!==g.id)return;var p=posFn(a,i);if(p){xs.push(p[0]);ys.push(p[1])}});if(!xs.length)return;
     var x0=Math.min.apply(0,xs)-2.4,x1=Math.max.apply(0,xs)+2.4,y0=Math.min.apply(0,ys)-3.9,y1=Math.max.apply(0,ys)+4.2;
     out+='<rect class="gbox'+(g.noBox?' off':'')+'" data-gid="'+g.id+'" x="'+x0.toFixed(2)+'" y="'+y0.toFixed(2)+'" width="'+(x1-x0).toFixed(2)+'" height="'+(y1-y0).toFixed(2)+'" rx="1.4" style="stroke:'+g.color+'"/>'
       +'<g class="ghandle'+(g.noBox?' nobox':'')+'" data-gid="'+g.id+'" tabindex="0" role="button" aria-label="'+esc(g.name)+'. Drag or use arrow keys to move the whole group. Double-tap to '+(g.noBox?'show':'hide')+' the outline." transform="translate('+x0.toFixed(2)+' '+(y0-2.5).toFixed(2)+')">'
       +(function(){var sk=cb[g.id]&&cb[g.id].skill?' · '+cb[g.id].skill:'',lab=g.name+sk;
         return '<rect width="'+(Math.max(4.6,(lab.length+2)*.72*labelScale()+1.2)).toFixed(2)+'" height="'+(2.2*labelScale()).toFixed(2)+'" rx="'+(1.1*labelScale()).toFixed(2)+'" style="fill:'+g.color+'"/><text x=".8" y="'+(1.55*labelScale()).toFixed(2)+'">⠿ '+esc(lab)+'</text></g>'})()});
   return out}
-/* select athletes on the mat to make or change stunt groups */
+/* select athletes on the mat (tap several, or draw a box) to move them together */
 var selMode=false,sel=[],box=null;
 function drawBox(){var r=document.getElementById('marquee');if(!r)return;if(!box){r.setAttribute('visibility','hidden');return}
   r.setAttribute('x',Math.min(box.x0,box.x1));r.setAttribute('y',Math.min(box.y0,box.y1));r.setAttribute('width',Math.abs(box.x1-box.x0));r.setAttribute('height',Math.abs(box.y1-box.y0));r.setAttribute('visibility','visible')}
@@ -1287,15 +1293,15 @@ function endBox(){var b0=box;box=null;drawBox();
   if(!hit.length){flash('No athletes inside that box.');return}
   if(!selMode){selMode=true;sel=[]}
   hit.forEach(function(id){if(sel.indexOf(id)<0)sel.push(id)});renderMat();renderSelBar();
-  flash(sel.length+' selected. Tap “Make stunt group” to group them.')}
+  flash(sel.length+' selected. Drag any of them to move them together.')}
 function renderSelBar(){var b=document.getElementById('selBar'),btn=document.getElementById('selBtn');if(!b)return;
   if(btn)btn.textContent=selMode?'Done selecting':'Select athletes';
   if(!selMode){b.hidden=true;b.innerHTML='';return}
   b.hidden=false;
-  b.innerHTML='<span><b>'+sel.length+'</b> selected. Drag a box around athletes, or tap one to add or remove it.</span>'
-   +'<button class="btn small primary" data-act="selMake"'+(sel.length<2?' disabled':'')+'>Make stunt group</button>'
+  b.innerHTML='<span><b>'+sel.length+'</b> selected. '+(sel.length>1?'Drag any of them to move them all together. ':'')+'Tap an athlete to add or remove them, or draw a box around more.</span>'
+   +(!GROUPS_ON?'':'<button class="btn small primary" data-act="selMake"'+(sel.length<2?' disabled':'')+'>Make stunt group</button>'
    +(R.groups.length?'<select class="field" id="selAdd" data-f="selAdd"'+(sel.length?'':' disabled')+'><option value="">Add to a group…</option>'+R.groups.map(function(g){return '<option value="'+g.id+'">'+esc(g.name)+'</option>'}).join('')+'</select>':'')
-   +'<button class="btn small" data-act="selUngroup"'+(sel.length?'':' disabled')+'>Take out of group</button>'
+   +'<button class="btn small" data-act="selUngroup"'+(sel.length?'':' disabled')+'>Take out of group</button>')
    +'<button class="btn small quiet" data-act="selClear"'+(sel.length?'':' disabled')+'>Clear</button>'
    +(function(){var w=find(cur).e.move||[1,MOVE];return '<span class="selmv">Travel on counts <select class="field num" id="selMvA" aria-label="Selected athletes start travelling on count">'+cntOpts(w[0])+'</select> to <select class="field num" id="selMvB" aria-label="Selected athletes arrive on count">'+cntOpts(w[1])+'</select><button class="btn small" data-act="selMove"'+(sel.length?'':' disabled')+'>Set for selected</button></span>'})()}
 function nextGroupColor(){var used=R.groups.map(function(g){return g.color});return GROUP_COLORS.find(function(c){return used.indexOf(c)<0})||GROUP_COLORS[R.groups.length%GROUP_COLORS.length]}
@@ -1659,7 +1665,12 @@ app.addEventListener('pointerdown',function(e){
   var d=e.target.closest('#mat .dot');
   if(!d&&e.target.closest('#mat')){if(playing)return;e.preventDefault();if(PHONE&&!selMode){matSwipeStart(e);try{document.getElementById('mat').setPointerCapture(e.pointerId)}catch(x){}return}var m0=toMatRaw(e);box={x0:m0[0],y0:m0[1],x1:m0[0],y1:m0[1],add:selMode};drawBox();try{document.getElementById('mat').setPointerCapture(e.pointerId)}catch(x){}return}
   if(!d)return;if(playing){flash('Pause to move athletes.');return}
-  if(selMode){e.preventDefault();var sid=d.dataset.id,k=sel.indexOf(sid);if(k>=0)sel.splice(k,1);else sel.push(sid);renderMat();renderSelBar();return}
+  /* several athletes selected: dragging any selected one moves them all together; tapping one adds or removes it */
+  if(!selMode&&(e.shiftKey||e.ctrlKey||e.metaKey)){e.preventDefault();selMode=true;sel=[d.dataset.id];render();flash('Selecting: click more athletes (or draw a box), then drag any of them to move them all.');return}
+  if(selMode){e.preventDefault();var sid=d.dataset.id;
+    if(sel.indexOf(sid)<0){sel.push(sid);renderMat();renderSelBar();return}
+    var its=find(cur),sst={};sel.forEach(function(id){var i=R.athletes.findIndex(function(a){return a.id===id});if(i>=0)sst[id]=posOf(its.e,R.athletes[i],i).slice()});
+    drag={id:sid,el:d,moved:false,ids:Object.keys(sst),start:sst,selTap:true};try{d.setPointerCapture(e.pointerId)}catch(x){}return}
   e.preventDefault();var it0=find(cur),a0=R.athletes.find(function(a){return a.id===d.dataset.id}),ids=[d.dataset.id],start={};
   ids.forEach(function(id){var i=R.athletes.findIndex(function(a){return a.id===id});start[id]=posOf(it0.e,R.athletes[i],i).slice()});
   drag={id:d.dataset.id,el:d,moved:false,ids:ids,start:start};try{d.setPointerCapture(e.pointerId)}catch(x){}});
@@ -1681,7 +1692,11 @@ window.addEventListener('pointermove',function(e){
     if(gh2)gh2.setAttribute('transform','translate('+(drag.box[0]+gdx).toFixed(2)+' '+(drag.box[1]+gdy-2.5).toFixed(2)+')');
     drag.moved=true;showGuide(nc[0]);return}
   if(!drag)return;var p=toMat(e),it=find(cur),s0=drag.start[drag.id],dx=p[0]-s0[0],dy=p[1]-s0[1];
-  drag.ids.forEach(function(id){var q=id===drag.id?p:[Math.max(0,Math.min(54,drag.start[id][0]+dx)),Math.max(0,Math.min(42,drag.start[id][1]+dy))];it.e.pos[id]=q;
+  if(drag.ids.length>1){/* keep the whole selection on the mat and in the same shape */
+    var mnX=54,mxX=0,mnY=42,mxY=0;drag.ids.forEach(function(id){var q=drag.start[id];mnX=Math.min(mnX,q[0]);mxX=Math.max(mxX,q[0]);mnY=Math.min(mnY,q[1]);mxY=Math.max(mxY,q[1])});
+    dx=Math.max(-mnX,Math.min(54-mxX,dx));dy=Math.max(-mnY,Math.min(42-mxY,dy));p=[r2(s0[0]+dx),r2(s0[1]+dy)]}
+  if(drag.selTap&&!drag.moved&&Math.hypot(dx,dy)<0.6)return;
+  drag.ids.forEach(function(id){var q=id===drag.id?p:[r2(Math.max(0,Math.min(54,drag.start[id][0]+dx))),r2(Math.max(0,Math.min(42,drag.start[id][1]+dy)))];it.e.pos[id]=q;
     var el=id===drag.id?drag.el:document.querySelector('#dots .dot[data-id="'+id+'"]');if(el)el.setAttribute('transform','translate('+q[0]+' '+q[1]+')')});
   drag.moved=true;showGuide(p[0]);
   {var gb=document.getElementById('gboxes');if(gb)gb.innerHTML=groupBoxes(function(a,i){return posOf(it.e,a,i)})}});
@@ -1729,7 +1744,11 @@ app.addEventListener('keydown',function(e){
   var dx={ArrowLeft:-1,ArrowRight:1}[e.key]||0,dy={ArrowUp:-1,ArrowDown:1}[e.key]||0;if(!dx&&!dy)return;e.preventDefault();
   var it=find(cur),id=d.dataset.id,i=R.athletes.findIndex(function(a){return a.id===id}),p=posOf(it.e,R.athletes[i],i);
   var np=L.free?[Math.max(0,Math.min(54,p[0]+dx)),Math.max(0,Math.min(42,p[1]+dy))]:snapPos(Math.round(p[0]/3)*3+dx*3,p[1]+dy),ddx=np[0]-p[0],ddy=np[1]-p[1],a0=R.athletes[i];
-  it.e.pos[a0.id]=np;renderMat();markDirty();refreshTraffic();
+  var grp=selMode&&sel.length>1&&sel.indexOf(id)>=0?sel:[a0.id];
+  if(grp.length>1){var mnX=54,mxX=0,mnY=42,mxY=0;grp.forEach(function(k){var j=R.athletes.findIndex(function(z){return z.id===k}),q=posOf(it.e,R.athletes[j],j);mnX=Math.min(mnX,q[0]);mxX=Math.max(mxX,q[0]);mnY=Math.min(mnY,q[1]);mxY=Math.max(mxY,q[1])});
+    ddx=Math.max(-mnX,Math.min(54-mxX,ddx));ddy=Math.max(-mnY,Math.min(42-mxY,ddy));
+    grp.forEach(function(k){var j=R.athletes.findIndex(function(z){return z.id===k}),q=posOf(it.e,R.athletes[j],j);it.e.pos[k]=[r2(q[0]+ddx),r2(q[1]+ddy)]})}
+  else it.e.pos[a0.id]=np;renderMat();markDirty();refreshTraffic();
   var nd=document.querySelector('#mat .dot[data-id="'+id+'"]');if(nd)nd.focus()});
 
 /* ---- reorder the count sheet: drag 8-counts (also into another section) and whole sections ---- */
@@ -1798,7 +1817,7 @@ function exportPDF(){
       doc.setFont('helvetica','bold');doc.setFontSize(6);doc.setTextColor(muted[0],muted[1],muted[2]);for(var k=0;k<9;k++)doc.text(String(k+1),x0+(3+k*6)*s,y0+h+7,{align:'center'});
       doc.setFont('helvetica','normal');doc.setFontSize(5);doc.text('FRONT',x0+w/2,y0+h+13,{align:'center'});
       var pos=function(a,i){return posOf(e,a,i)};
-      R.groups.forEach(function(g){var xs=[],ys=[];R.athletes.forEach(function(a,i){if(a.group===g.id){var p=pos(a,i);xs.push(p[0]);ys.push(p[1])}});if(!xs.length)return;
+      RG().forEach(function(g){var xs=[],ys=[];R.athletes.forEach(function(a,i){if(a.group===g.id){var p=pos(a,i);xs.push(p[0]);ys.push(p[1])}});if(!xs.length)return;
         var c=hexRGB(g.color);doc.setDrawColor(c[0],c[1],c[2]);doc.setLineWidth(.7);doc.setLineDashPattern([2,1.2],0);
         var gx0=Math.max(0,Math.min.apply(0,xs)-2.3),gx1=Math.min(54,Math.max.apply(0,xs)+2.3),gy0=Math.max(0,Math.min.apply(0,ys)-2.3),gy1=Math.min(42,Math.max.apply(0,ys)+2.3);
         doc.roundedRect(x0+gx0*s,y0+gy0*s,(gx1-gx0)*s,(gy1-gy0)*s,2,2,'S');doc.setLineDashPattern([],0)});
@@ -2435,7 +2454,7 @@ function openCtx(id,x,y){closeCtx();var a=R.athletes.find(function(q){return q.i
     +'<button role="menuitem" data-c="spot">'+(L.spot===id?'Turn off spotlight':'★ Spotlight '+esc(a.name.trim()))+'</button>'
     +(prev&&!same?'<button role="menuitem" data-c="stay">Stay where they were last 8-count</button>':'')
     +(bend?'<button role="menuitem" data-c="straight">Straighten their path</button>':'')
-    +'<button role="menuitem" data-c="sel">Select (to group, time or line up)</button>';
+    +'<button role="menuitem" data-c="sel">Select (to move several together)</button>';
   document.body.appendChild(m);ctxm={el:m,id:id};
   var w=m.offsetWidth,h=m.offsetHeight;m.style.left=Math.max(8,Math.min(window.innerWidth-w-8,x+4))+'px';m.style.top=Math.max(8,Math.min(window.innerHeight-h-8,y+4))+'px';
   var first=m.querySelector('button');if(first)first.focus();
@@ -2480,7 +2499,7 @@ app.addEventListener('wheel',function(e){if(!(e.ctrlKey||e.metaKey))return;var m
 /* ---------- keyboard shortcuts (computers) ---------- */
 var kbdOpen=false,fClipKey=null;
 var KBD=[['Space','Play / pause'],['← →','Previous / next 8-count'],['Ctrl/⌘ C','Copy this 8-count’s formation'],['Ctrl/⌘ V','Paste it here (selected athletes only, if any are selected)'],['M','Mirror left / right'],
-  ['F','Full-screen run-through'],['B','Big mat on / off'],['S','Select athletes on / off'],['Esc','Cancel pick-up, close menus'],['Ctrl/⌘ Z','Undo (add Shift to redo)'],['Arrow keys on an athlete','Nudge them'],['?','Show these shortcuts']];
+  ['F','Full-screen run-through'],['B','Big mat on / off'],['S','Select athletes on / off'],['Shift-click','Select several athletes, then drag any of them to move all'],['Arrow keys on a selected athlete','Nudge the whole selection'],['Esc','Cancel pick-up, close menus'],['Ctrl/⌘ Z','Undo (add Shift to redo)'],['Arrow keys on an athlete','Nudge them'],['?','Show these shortcuts']];
 function kbdHtml(){return '<div class="pdfpanel" id="kbdPanel"><span class="fl">Keyboard shortcuts</span><dl class="kbd">'+KBD.map(function(k){return '<dt><kbd>'+esc(k[0])+'</kbd></dt><dd>'+esc(k[1])+'</dd>'}).join('')+'</dl><div class="ctl"><button class="btn small quiet" data-act="kbdHelp">Close</button></div></div>'}
 window.addEventListener('keydown',function(e){
   if(e.key==='Escape'){if(ctxm){closeCtx();return}if(RUN){runClose();return}if(pickId){pickId=null;renderMat();return}if(kbdOpen){kbdOpen=false;render();return}}
@@ -2503,6 +2522,7 @@ window.addEventListener('keydown',function(e){
 /* tap an athlete without dragging = pick them up; tap an empty spot = put them there */
 var _endDrag0=null;
 function betaTapCheck(kind,e){/* called from the mat's own handlers */
+  if(kind==='dot'&&drag&&drag.selTap&&!drag.moved){var tid=drag.id;drag=null;showGuide(null);sel=sel.filter(function(x){return x!==tid});renderMat();renderSelBar();return true}
   if(kind==='dot'){if(!drag||drag.moved||drag.group||selMode)return false;var id=drag.id;drag=null;showGuide(null);
     if(pickId===id){pickId=null;renderMat();return true}pickId=id;renderMat();flash('Tap a spot on the mat to move '+pickName()+' there. Tap '+pickName()+' again to cancel.');return true}
   if(kind==='empty'){if(!pickId||!downAt)return false;return placePicked(downAt.x,downAt.y)}
